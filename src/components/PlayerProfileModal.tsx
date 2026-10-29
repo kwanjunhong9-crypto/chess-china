@@ -1,6 +1,8 @@
 import React from 'react';
 import { MatchRecord, Player } from '../types/chess';
-import { X, Trophy, Swords, Flame, Award, Calendar, ChevronRight, PlayCircle } from 'lucide-react';
+import { X, Trophy, Swords, Flame, Award, Calendar, ChevronRight, PlayCircle, Shield } from 'lucide-react';
+import { RankEmblem } from './RankEmblem';
+import { getNextTierProgress, getTierByWins } from '../utils/tierSystem';
 
 interface Props {
   player: Player | null;
@@ -22,22 +24,17 @@ export const PlayerProfileModal: React.FC<Props> = ({
     m => m.redPlayer.id === player.id || m.blackPlayer.id === player.id
   );
 
-  const getRankBadge = (score: number) => {
-    if (score >= 2400) return { title: '特级大师', color: 'text-red-400 bg-red-950/60 border-red-500/40' };
-    if (score >= 2000) return { title: '国家大师', color: 'text-amber-400 bg-amber-950/60 border-amber-500/40' };
-    if (score >= 1700) return { title: '一级棋士', color: 'text-purple-400 bg-purple-950/60 border-purple-500/40' };
-    if (score >= 1400) return { title: '二级棋士', color: 'text-blue-400 bg-blue-950/60 border-blue-500/40' };
-    if (score >= 1200) return { title: '三级棋士', color: 'text-emerald-400 bg-emerald-950/60 border-emerald-500/40' };
-    return { title: '象棋新秀', color: 'text-stone-400 bg-stone-900 border-stone-700' };
-  };
-
-  const badge = getRankBadge(player.rankScore);
   const totalMatches = player.rankMatches + player.matchMatches;
   const totalWins = player.rankWins + player.matchWins;
   const overallWinRate = totalMatches > 0 ? Math.round((totalWins / totalMatches) * 100) : 0;
 
+  // Tier info based on user win ladder requirements
+  const tierProgress = getNextTierProgress(player.rankWins);
+  const currentTier = tierProgress.currentTier;
+  const nextTier = tierProgress.nextTier;
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-md p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
       <div className="w-full max-w-lg rounded-2xl bg-stone-900 border border-stone-800 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
         {/* Modal Header */}
         <div className="p-5 border-b border-stone-800 bg-gradient-to-r from-stone-900 via-stone-850 to-stone-900 flex justify-between items-start">
@@ -46,14 +43,14 @@ export const PlayerProfileModal: React.FC<Props> = ({
               {player.name.slice(0, 1)}
             </div>
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="text-xl font-bold text-stone-100">{player.name}</h3>
-                <span className={`text-xs px-2.5 py-0.5 rounded-full border font-semibold ${badge.color}`}>
-                  {badge.title}
+                <span className={`text-xs px-2.5 py-0.5 rounded-full border font-bold ${currentTier.badgeBg} ${currentTier.textColor} ${currentTier.badgeBorder}`}>
+                  {currentTier.name} ({currentTier.englishName})
                 </span>
               </div>
               <p className="text-xs text-stone-400 mt-1">
-                称号：{player.title || '象棋爱好者'} · 棋艺入驻日期：{player.createdAt.split('T')[0]}
+                称号：{player.title || '象棋棋手'} · 棋艺入驻：{player.createdAt.split('T')[0]}
               </p>
             </div>
           </div>
@@ -67,7 +64,48 @@ export const PlayerProfileModal: React.FC<Props> = ({
         </div>
 
         {/* Content Body */}
-        <div className="p-5 overflow-y-auto space-y-5 text-sm">
+        <div className="p-5 overflow-y-auto space-y-4 text-sm">
+          
+          {/* Glorious Tier Emblem Banner (Matching user reference photo) */}
+          <div className="relative overflow-hidden rounded-2xl bg-gradient-to-b from-stone-950 via-stone-900 to-stone-950 p-4 border border-stone-800 flex flex-col items-center text-center shadow-inner">
+            <div className="absolute inset-0 opacity-10 bg-[radial-gradient(#c084fc_1px,transparent_1px)] [background-size:12px_12px] pointer-events-none" />
+
+            {/* Winged Insignia Shield */}
+            <RankEmblem tier={currentTier} size="lg" />
+
+            <div className="mt-2">
+              <span className={`text-base font-black tracking-wider block ${currentTier.textColor}`}>
+                {currentTier.name} · {currentTier.englishName}
+              </span>
+              <span className="text-xs text-stone-400">
+                当前段位胜局：<strong className="text-amber-400 font-bold">{player.rankWins}</strong> 局
+              </span>
+            </div>
+
+            {/* Next Tier Progress Bar */}
+            <div className="w-full mt-3 pt-3 border-t border-stone-800/80">
+              <div className="flex justify-between items-center text-xs text-stone-400 mb-1.5">
+                <span>
+                  {nextTier
+                    ? `晋级至下一段位「${nextTier.name} (${nextTier.englishName})」`
+                    : '已达最高荣誉「至尊宿敌」'}
+                </span>
+                <span className="font-bold text-amber-300">
+                  {nextTier ? `还需 ${tierProgress.remainingWins} 胜` : '最高段位'}
+                </span>
+              </div>
+
+              {nextTier && (
+                <div className="w-full h-2 rounded-full bg-stone-800 overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-amber-500 to-purple-500 rounded-full transition-all duration-500"
+                    style={{ width: `${tierProgress.progressPercent}%` }}
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+
           {/* Dual Rating Cards */}
           <div className="grid grid-cols-2 gap-3">
             {/* Ranked Card */}
@@ -119,7 +157,7 @@ export const PlayerProfileModal: React.FC<Props> = ({
             </div>
             <div className="w-px h-6 bg-stone-800" />
             <div>
-              <span className="text-[11px] text-stone-400 block">总胜场</span>
+              <span className="text-[11px] text-stone-400 block">总胜局</span>
               <span className="text-base font-bold text-emerald-400">{totalWins}</span>
             </div>
             <div className="w-px h-6 bg-stone-800" />
@@ -131,7 +169,7 @@ export const PlayerProfileModal: React.FC<Props> = ({
             <div>
               <span className="text-[11px] text-stone-400 block">当前连胜/连败</span>
               <span className={`text-base font-bold ${player.rankStreak > 0 ? 'text-red-400' : 'text-stone-400'}`}>
-                {player.rankStreak > 0 ? `${player.rankStreak}连胜` : player.rankStreak < 0 ? `${Math.abs(player.rankStreak)}连败` : '无'}
+                {player.rankStreak > 0 ? `${player.rankStreak}连胜` : player.rankStreak < 0 ? `${Math.abs(player.rankStreak)}连败` : '平'}
               </span>
             </div>
           </div>
@@ -148,7 +186,7 @@ export const PlayerProfileModal: React.FC<Props> = ({
                 该棋手暂无完成的对局记录
               </div>
             ) : (
-              <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
+              <div className="space-y-2 max-h-[200px] overflow-y-auto pr-1">
                 {playerMatches.map((m) => {
                   const isRed = m.redPlayer.id === player.id;
                   const opponent = isRed ? m.blackPlayer.name : m.redPlayer.name;
