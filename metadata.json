@@ -1,0 +1,6 @@
+{
+  "name": "华夏象棋天梯与智能记分裁判系统",
+  "description": "专业中国象棋实时记分对弈、天梯排位/匹配分榜、AI智能胜负裁判与棋谱复盘导出系统，支持全端PWA与原生移动端打包。",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
