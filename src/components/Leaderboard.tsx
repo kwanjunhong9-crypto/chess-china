@@ -64,27 +64,27 @@ export const Leaderboard: React.FC<Props> = ({
         </div>
 
         {/* Tab Switcher: 排位 vs 匹配 */}
-        <div className="flex bg-stone-950 p-1 rounded-xl border border-stone-800 self-stretch sm:self-auto">
+        <div className="grid grid-cols-2 gap-1 p-1 bg-stone-950 rounded-xl border border-stone-800 w-full sm:w-[280px] shrink-0">
           <button
             onClick={() => onTabChange('ranked')}
-            className={`flex-1 sm:flex-none px-4 py-1.5 rounded-lg text-xs font-semibold transition flex items-center justify-center gap-1.5 ${
+            className={`w-full py-1.5 px-3 rounded-lg text-xs font-semibold transition flex items-center justify-center gap-1.5 whitespace-nowrap select-none ${
               activeTab === 'ranked'
                 ? 'bg-amber-600 text-stone-950 shadow-md font-bold'
                 : 'text-stone-400 hover:text-stone-200'
             }`}
           >
-            <Flame className="w-3.5 h-3.5" />
+            <Flame className="w-3.5 h-3.5 shrink-0" />
             <span>排位天梯榜</span>
           </button>
           <button
             onClick={() => onTabChange('match')}
-            className={`flex-1 sm:flex-none px-4 py-1.5 rounded-lg text-xs font-semibold transition flex items-center justify-center gap-1.5 ${
+            className={`w-full py-1.5 px-3 rounded-lg text-xs font-semibold transition flex items-center justify-center gap-1.5 whitespace-nowrap select-none ${
               activeTab === 'match'
                 ? 'bg-amber-600 text-stone-950 shadow-md font-bold'
                 : 'text-stone-400 hover:text-stone-200'
             }`}
           >
-            <Medal className="w-3.5 h-3.5" />
+            <Medal className="w-3.5 h-3.5 shrink-0" />
             <span>匹配积分榜</span>
           </button>
         </div>
