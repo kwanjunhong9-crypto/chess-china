@@ -29,8 +29,14 @@ export const MemberManagementModal: React.FC<Props> = ({
 
   const handleAddMember = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) {
+    const cleanName = name.trim();
+    if (!cleanName) {
       setError('请输入成员姓名');
+      return;
+    }
+
+    if (players.some(p => p.name.toLowerCase() === cleanName.toLowerCase())) {
+      setError(`成员 "${cleanName}" 已在列表中，不可重复添加`);
       return;
     }
 
@@ -38,6 +44,7 @@ export const MemberManagementModal: React.FC<Props> = ({
     setError(null);
     setSuccess(null);
 
+    let serverSucceeded = false;
     try {
       const res = await fetch('/api/players/add', {
         method: 'POST',
@@ -45,22 +52,54 @@ export const MemberManagementModal: React.FC<Props> = ({
           'Content-Type': 'application/json',
           'x-admin-password': adminPassword,
         },
-        body: JSON.stringify({ name: name.trim(), title: title.trim() }),
+        body: JSON.stringify({ name: cleanName, title: title.trim() }),
       });
 
-      const data = await res.json();
-      if (res.ok && data.success) {
-        setSuccess(`成功添加成员 "${name.trim()}"！`);
-        setName('');
-        setTitle('');
-        onPlayerAdded(data.player, data.players);
-      } else {
-        setError(data.error || '添加失败');
+      const contentType = res.headers.get('content-type');
+      if (res.ok && contentType && contentType.includes('application/json')) {
+        const data = await res.json();
+        if (data.success) {
+          serverSucceeded = true;
+          setSuccess(`成功添加成员 "${cleanName}"！`);
+          setName('');
+          setTitle('');
+          onPlayerAdded(data.player, data.players);
+          return;
+        }
       }
     } catch (err: unknown) {
-      setError((err as Error).message || '网络请求错误');
+      console.warn('Backend sync failed, using offline fallback:', err);
     } finally {
       setLoading(false);
+    }
+
+    if (!serverSucceeded) {
+      // Local fallback for offline / downloaded app mode
+      const newPlayer: Player = {
+        id: `p_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+        name: cleanName,
+        title: title.trim() || '象棋爱好者',
+        createdAt: new Date().toISOString(),
+        rankScore: 1200,
+        rankMatches: 0,
+        rankWins: 0,
+        rankLosses: 0,
+        rankDraws: 0,
+        rankStreak: 0,
+        bestRankScore: 1200,
+        matchScore: 1000,
+        matchMatches: 0,
+        matchWins: 0,
+        matchLosses: 0,
+        matchDraws: 0,
+        matchStreak: 0,
+        bestMatchScore: 1000,
+      };
+      const allUpdated = [...players, newPlayer];
+      setSuccess(`成功添加成员 "${cleanName}"！`);
+      setName('');
+      setTitle('');
+      onPlayerAdded(newPlayer, allUpdated);
     }
   };
 
@@ -71,6 +110,7 @@ export const MemberManagementModal: React.FC<Props> = ({
     setError(null);
     setSuccess(null);
 
+    let serverSucceeded = false;
     try {
       const res = await fetch('/api/players/delete', {
         method: 'POST',
@@ -81,17 +121,26 @@ export const MemberManagementModal: React.FC<Props> = ({
         body: JSON.stringify({ id }),
       });
 
-      const data = await res.json();
-      if (res.ok && data.success) {
-        setSuccess(`已移除成员 "${playerName}"`);
-        onPlayerDeleted(data.players);
-      } else {
-        setError(data.error || '删除失败');
+      const contentType = res.headers.get('content-type');
+      if (res.ok && contentType && contentType.includes('application/json')) {
+        const data = await res.json();
+        if (data.success) {
+          serverSucceeded = true;
+          setSuccess(`已移除成员 "${playerName}"`);
+          onPlayerDeleted(data.players);
+          return;
+        }
       }
     } catch (err: unknown) {
-      setError((err as Error).message || '网络请求错误');
+      console.warn('Backend delete sync failed, applying local update:', err);
     } finally {
       setLoading(false);
+    }
+
+    if (!serverSucceeded) {
+      const allUpdated = players.filter(p => p.id !== id);
+      setSuccess(`已移除成员 "${playerName}"`);
+      onPlayerDeleted(allUpdated);
     }
   };
 

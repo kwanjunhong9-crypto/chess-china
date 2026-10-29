@@ -44,10 +44,31 @@ import {
 } from 'lucide-react';
 
 export default function App() {
-  // State from server
-  const [players, setPlayers] = useState<Player[]>([]);
-  const [currentMatch, setCurrentMatch] = useState<MatchRecord | null>(null);
-  const [matchHistory, setMatchHistory] = useState<MatchRecord[]>([]);
+  // Local cache helper for offline / downloaded app mode
+  const getCachedState = () => {
+    try {
+      const raw = localStorage.getItem('huaxia_xiangqi_state');
+      if (raw) return JSON.parse(raw);
+    } catch (_) {}
+    return null;
+  };
+
+  const initialCache = getCachedState();
+
+  // State from server / local storage
+  const [players, setPlayers] = useState<Player[]>(initialCache?.players || []);
+  const [currentMatch, setCurrentMatch] = useState<MatchRecord | null>(initialCache?.currentMatch || null);
+  const [matchHistory, setMatchHistory] = useState<MatchRecord[]>(initialCache?.matchHistory || []);
+
+  // Sync to local cache whenever state changes
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        'huaxia_xiangqi_state',
+        JSON.stringify({ players, currentMatch, matchHistory })
+      );
+    } catch (_) {}
+  }, [players, currentMatch, matchHistory]);
 
   // Admin authentication state (saved in sessionStorage, never plaintext in UI)
   const [adminPassword, setAdminPassword] = useState<string>(() => {
@@ -83,20 +104,23 @@ export default function App() {
     setTimeout(() => setNotification(null), 3500);
   };
 
-  // Fetch state from server
+  // Fetch state from server safely
   const fetchServerState = useCallback(async () => {
     try {
       const res = await fetch('/api/state');
       if (res.ok) {
-        const data = await res.json();
-        if (data.success) {
-          setPlayers(data.players || []);
-          setCurrentMatch(data.currentMatch || null);
-          setMatchHistory(data.matchHistory || []);
+        const contentType = res.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+          const data = await res.json();
+          if (data.success) {
+            setPlayers(data.players || []);
+            setCurrentMatch(data.currentMatch || null);
+            setMatchHistory(data.matchHistory || []);
+          }
         }
       }
     } catch (err) {
-      console.warn('Syncing with server error:', err);
+      console.warn('Syncing with server error (running in local/offline mode):', err);
     }
   }, []);
 
@@ -239,16 +263,25 @@ export default function App() {
         },
       });
 
-      if (res.ok) {
+      const contentType = res.headers.get('content-type');
+      if (res.ok && contentType && contentType.includes('application/json')) {
         const data = await res.json();
         if (data.success) {
           setCurrentMatch(data.match);
           showToast('已撤销上一手走棋', 'info');
+          return;
         }
       }
     } catch (err) {
-      showToast('悔棋操作失败', 'error');
+      console.warn('Backend undo failed, using local undo:', err);
     }
+
+    // Local undo fallback
+    const updatedMoves = [...currentMatch.moves];
+    updatedMoves.pop();
+    const updatedMatch = { ...currentMatch, moves: updatedMoves };
+    setCurrentMatch(updatedMatch);
+    showToast('已撤销上一手走棋', 'info');
   };
 
   // Start new match
@@ -257,6 +290,22 @@ export default function App() {
       setShowAdminLogin(true);
       return;
     }
+
+    const red = players.find(p => p.name.toLowerCase() === redName.toLowerCase());
+    const black = players.find(p => p.name.toLowerCase() === blackName.toLowerCase());
+    if (!red || !black) {
+      showToast('未找到指定成员', 'error');
+      return;
+    }
+
+    const localMatch: MatchRecord = {
+      id: `match_${Date.now()}`,
+      mode,
+      redPlayer: { id: red.id, name: red.name },
+      blackPlayer: { id: black.id, name: black.name },
+      startTime: new Date().toISOString(),
+      moves: [],
+    };
 
     try {
       const res = await fetch('/api/match/start', {
@@ -268,22 +317,98 @@ export default function App() {
         body: JSON.stringify({ redPlayerName: redName, blackPlayerName: blackName, mode }),
       });
 
-      const data = await res.json();
-      if (res.ok && data.success) {
-        setCurrentMatch(data.match);
-        setPlayers(data.players);
-        showToast(`对局已正式开启：${redName}(红) VS ${blackName}(黑)`, 'success');
-      } else {
-        showToast(data.error || '开启对局失败', 'error');
+      const contentType = res.headers.get('content-type');
+      if (res.ok && contentType && contentType.includes('application/json')) {
+        const data = await res.json();
+        if (data.success) {
+          setCurrentMatch(data.match);
+          if (data.players) setPlayers(data.players);
+          showToast(`对局已正式开启：${redName}(红) VS ${blackName}(黑)`, 'success');
+          return;
+        }
       }
     } catch (err: unknown) {
-      showToast((err as Error).message || '网络连接错误', 'error');
+      console.warn('Backend match start failed, running locally:', err);
     }
+
+    setCurrentMatch(localMatch);
+    showToast(`对局已正式开启：${redName}(红) VS ${blackName}(黑)`, 'success');
   };
 
   // Settle / Finish match
   const handleFinishMatch = async (winner: 'red' | 'black' | 'draw', reason: string, aiText?: string) => {
     if (!isAdmin || !currentMatch) return;
+
+    const isRanked = currentMatch.mode === 'ranked';
+    const updatedPlayers = [...players];
+    const redIdx = updatedPlayers.findIndex(p => p.id === currentMatch.redPlayer.id);
+    const blackIdx = updatedPlayers.findIndex(p => p.id === currentMatch.blackPlayer.id);
+
+    if (redIdx !== -1 && blackIdx !== -1) {
+      const red = { ...updatedPlayers[redIdx] };
+      const black = { ...updatedPlayers[blackIdx] };
+
+      const delta = winner === 'draw' ? (isRanked ? 5 : 3) : (isRanked ? 25 : 15);
+      const lossDelta = winner === 'draw' ? (isRanked ? -5 : -3) : (isRanked ? -15 : -10);
+
+      if (isRanked) {
+        red.rankMatches++;
+        black.rankMatches++;
+        if (winner === 'red') {
+          red.rankWins++;
+          red.rankStreak = red.rankStreak > 0 ? red.rankStreak + 1 : 1;
+          red.rankScore += delta;
+          red.bestRankScore = Math.max(red.bestRankScore, red.rankScore);
+          black.rankLosses++;
+          black.rankStreak = black.rankStreak < 0 ? black.rankStreak - 1 : -1;
+          black.rankScore = Math.max(1000, black.rankScore + lossDelta);
+        } else if (winner === 'black') {
+          black.rankWins++;
+          black.rankStreak = black.rankStreak > 0 ? black.rankStreak + 1 : 1;
+          black.rankScore += delta;
+          black.bestRankScore = Math.max(black.bestRankScore, black.rankScore);
+          red.rankLosses++;
+          red.rankStreak = red.rankStreak < 0 ? red.rankStreak - 1 : -1;
+          red.rankScore = Math.max(1000, red.rankScore + lossDelta);
+        } else {
+          red.rankDraws++;
+          black.rankDraws++;
+        }
+      } else {
+        red.matchMatches++;
+        black.matchMatches++;
+        if (winner === 'red') {
+          red.matchWins++;
+          red.matchStreak = red.matchStreak > 0 ? red.matchStreak + 1 : 1;
+          red.matchScore += delta;
+          red.bestMatchScore = Math.max(red.bestMatchScore, red.matchScore);
+          black.matchLosses++;
+          black.matchStreak = black.matchStreak < 0 ? black.matchStreak - 1 : -1;
+          black.matchScore = Math.max(800, black.matchScore + lossDelta);
+        } else if (winner === 'black') {
+          black.matchWins++;
+          black.matchStreak = black.matchStreak > 0 ? black.matchStreak + 1 : 1;
+          black.matchScore += delta;
+          black.bestMatchScore = Math.max(black.bestMatchScore, black.matchScore);
+          red.matchLosses++;
+          red.matchStreak = red.matchStreak < 0 ? red.matchStreak - 1 : -1;
+          red.matchScore = Math.max(800, red.matchScore + lossDelta);
+        } else {
+          red.matchDraws++;
+          black.matchDraws++;
+        }
+      }
+      updatedPlayers[redIdx] = red;
+      updatedPlayers[blackIdx] = black;
+    }
+
+    const completed: MatchRecord = {
+      ...currentMatch,
+      endTime: new Date().toISOString(),
+      winner,
+      winReason: reason || '正常终局',
+      aiAnalysis: aiText || aiEval.commentary,
+    };
 
     try {
       const res = await fetch('/api/match/finish', {
@@ -299,27 +424,41 @@ export default function App() {
         }),
       });
 
-      const data = await res.json();
-      if (res.ok && data.success) {
-        setCurrentMatch(null);
-        setPlayers(data.players);
-        setMatchHistory(data.matchHistory);
+      const contentType = res.headers.get('content-type');
+      if (res.ok && contentType && contentType.includes('application/json')) {
+        const data = await res.json();
+        if (data.success) {
+          setCurrentMatch(null);
+          setPlayers(data.players);
+          setMatchHistory(data.matchHistory);
+          const winnerName =
+            winner === 'red'
+              ? `${data.completedMatch.redPlayer.name} (红方)`
+              : winner === 'black'
+              ? `${data.completedMatch.blackPlayer.name} (黑方)`
+              : '双方和棋';
 
-        const winnerName =
-          winner === 'red'
-            ? `${data.completedMatch.redPlayer.name} (红方)`
-            : winner === 'black'
-            ? `${data.completedMatch.blackPlayer.name} (黑方)`
-            : '双方和棋';
-
-        showToast(`终局结算完成！${winnerName} 积分已自动结算更新。`, 'success');
-        setReplayMatch(data.completedMatch);
-      } else {
-        showToast(data.error || '结算失败', 'error');
+          showToast(`终局结算完成！${winnerName} 积分已自动结算更新。`, 'success');
+          setReplayMatch(data.completedMatch);
+          return;
+        }
       }
     } catch (err: unknown) {
-      showToast((err as Error).message || '网络请求错误', 'error');
+      console.warn('Backend match finish sync failed, applying local settlement:', err);
     }
+
+    // Local fallback update
+    setCurrentMatch(null);
+    setPlayers(updatedPlayers);
+    setMatchHistory([completed, ...matchHistory]);
+    const winnerName =
+      winner === 'red'
+        ? `${completed.redPlayer.name} (红方)`
+        : winner === 'black'
+        ? `${completed.blackPlayer.name} (黑方)`
+        : '双方和棋';
+    showToast(`终局结算完成！${winnerName} 积分已自动结算更新。`, 'success');
+    setReplayMatch(completed);
   };
 
   // Abort match
@@ -328,20 +467,17 @@ export default function App() {
     if (!confirm('确定要作废当前对局吗？未保存的走步将不会计入天梯。')) return;
 
     try {
-      const res = await fetch('/api/match/abort', {
+      await fetch('/api/match/abort', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'x-admin-password': adminPassword,
         },
       });
-      if (res.ok) {
-        setCurrentMatch(null);
-        showToast('对局已作废取消', 'info');
-      }
-    } catch (err) {
-      showToast('操作失败', 'error');
-    }
+    } catch (_) {}
+
+    setCurrentMatch(null);
+    showToast('对局已作废取消', 'info');
   };
 
   // Request deep AI referee analysis via Gemini / AI Engine
