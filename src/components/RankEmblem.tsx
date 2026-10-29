@@ -1,9 +1,10 @@
 import React from 'react';
-import { TierInfo, getTierByWins } from '../utils/tierSystem';
+import { TierInfo, getTierByScore, getTierByWins } from '../utils/tierSystem';
 
 interface Props {
   tier?: TierInfo;
   wins?: number;
+  score?: number;
   size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl';
   showLabel?: boolean;
   className?: string;
@@ -12,11 +13,12 @@ interface Props {
 export const RankEmblem: React.FC<Props> = ({
   tier,
   wins,
+  score,
   size = 'md',
   showLabel = false,
   className = '',
 }) => {
-  const currentTier = tier || getTierByWins(wins ?? 0);
+  const currentTier = tier || (score !== undefined ? getTierByScore(score) : getTierByWins(wins ?? 0));
 
   // Dimension scaling
   const sizeMap = {

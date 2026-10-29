@@ -169,25 +169,104 @@ app.post('/api/players/add', verifyAdmin, (req, res) => {
     name: cleanName,
     title: title ? title.trim() : '象棋爱好者',
     createdAt: new Date().toISOString(),
-    rankScore: 1200,
+    rankScore: 0,
     rankMatches: 0,
     rankWins: 0,
     rankLosses: 0,
     rankDraws: 0,
     rankStreak: 0,
-    bestRankScore: 1200,
-    matchScore: 1000,
+    bestRankScore: 0,
+    matchScore: 0,
     matchMatches: 0,
     matchWins: 0,
     matchLosses: 0,
     matchDraws: 0,
     matchStreak: 0,
-    bestMatchScore: 1000,
+    bestMatchScore: 0,
   };
 
   db.players.push(newPlayer);
   saveDb(db);
   res.json({ success: true, player: newPlayer, players: db.players });
+});
+
+// Admin edit player rank score, matches, and title
+app.post('/api/players/update', verifyAdmin, (req, res) => {
+  const { id, name, title, rankScore, matchScore, rankWins, rankMatches, rankLosses, rankDraws } = req.body;
+  db = loadDb();
+  const player = db.players.find(p => p.id === id);
+  if (!player) {
+    return res.status(404).json({ success: false, error: '未找到该成员' });
+  }
+
+  if (name && typeof name === 'string' && name.trim()) {
+    const cleanName = name.trim();
+    if (db.players.some(p => p.id !== id && p.name.toLowerCase() === cleanName.toLowerCase())) {
+      return res.status(400).json({ success: false, error: `成员名称 "${cleanName}" 已被占用` });
+    }
+    player.name = cleanName;
+  }
+  if (title !== undefined) player.title = String(title).trim();
+  if (rankScore !== undefined) {
+    const num = Math.max(0, Math.round(Number(rankScore) || 0));
+    player.rankScore = num;
+    player.bestRankScore = Math.max(player.bestRankScore || 0, num);
+  }
+  if (matchScore !== undefined) {
+    const num = Math.max(0, Math.round(Number(matchScore) || 0));
+    player.matchScore = num;
+    player.bestMatchScore = Math.max(player.bestMatchScore || 0, num);
+  }
+  if (rankWins !== undefined) player.rankWins = Math.max(0, Math.round(Number(rankWins) || 0));
+  if (rankMatches !== undefined) player.rankMatches = Math.max(0, Math.round(Number(rankMatches) || 0));
+  if (rankLosses !== undefined) player.rankLosses = Math.max(0, Math.round(Number(rankLosses) || 0));
+  if (rankDraws !== undefined) player.rankDraws = Math.max(0, Math.round(Number(rankDraws) || 0));
+
+  saveDb(db);
+  res.json({ success: true, player, players: db.players });
+});
+
+// Batch sync local players to server database
+app.post('/api/players/batch-sync', verifyAdmin, (req, res) => {
+  const { players: clientPlayers } = req.body;
+  if (!Array.isArray(clientPlayers)) {
+    return res.status(400).json({ success: false, error: 'Invalid players list' });
+  }
+
+  db = loadDb();
+  let addedCount = 0;
+  for (const cp of clientPlayers) {
+    if (!cp.name) continue;
+    const cleanName = cp.name.trim();
+    if (!db.players.some(p => p.name.toLowerCase() === cleanName.toLowerCase())) {
+      db.players.push({
+        id: cp.id || `p_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+        name: cleanName,
+        title: cp.title || '象棋爱好者',
+        createdAt: cp.createdAt || new Date().toISOString(),
+        rankScore: typeof cp.rankScore === 'number' ? cp.rankScore : 0,
+        rankMatches: cp.rankMatches || 0,
+        rankWins: cp.rankWins || 0,
+        rankLosses: cp.rankLosses || 0,
+        rankDraws: cp.rankDraws || 0,
+        rankStreak: cp.rankStreak || 0,
+        bestRankScore: cp.bestRankScore || (typeof cp.rankScore === 'number' ? cp.rankScore : 0),
+        matchScore: typeof cp.matchScore === 'number' ? cp.matchScore : 0,
+        matchMatches: cp.matchMatches || 0,
+        matchWins: cp.matchWins || 0,
+        matchLosses: cp.matchLosses || 0,
+        matchDraws: cp.matchDraws || 0,
+        matchStreak: cp.matchStreak || 0,
+        bestMatchScore: cp.bestMatchScore || (typeof cp.matchScore === 'number' ? cp.matchScore : 0),
+      });
+      addedCount++;
+    }
+  }
+
+  if (addedCount > 0) {
+    saveDb(db);
+  }
+  res.json({ success: true, addedCount, players: db.players });
 });
 
 app.post('/api/players/delete', verifyAdmin, (req, res) => {
@@ -306,13 +385,18 @@ app.post('/api/match/finish', verifyAdmin, (req, res) => {
     redDelta = Math.round(baseK * (actualRed - expectedRed));
     blackDelta = Math.round(baseK * (actualBlack - expectedBlack));
 
-    // Ensure winner gets at least some points, loser loses some points
+    // User specified rule: 玩家每玩1局+50分 (Each game played adds +50 score)
+    // Plus bonus for winning (+20) or draw (+10)
+    const PLAY_BONUS = 50;
     if (winner === 'red') {
-      redDelta = Math.max(redDelta, isRanked ? 15 : 10);
-      blackDelta = Math.min(blackDelta, isRanked ? -12 : -8);
+      redDelta = PLAY_BONUS + 20;
+      blackDelta = PLAY_BONUS;
     } else if (winner === 'black') {
-      blackDelta = Math.max(blackDelta, isRanked ? 15 : 10);
-      redDelta = Math.min(redDelta, isRanked ? -12 : -8);
+      blackDelta = PLAY_BONUS + 20;
+      redDelta = PLAY_BONUS;
+    } else {
+      redDelta = PLAY_BONUS + 10;
+      blackDelta = PLAY_BONUS + 10;
     }
 
     // Apply stats
@@ -320,8 +404,8 @@ app.post('/api/match/finish', verifyAdmin, (req, res) => {
       const redBefore = red.rankScore;
       const blackBefore = black.rankScore;
 
-      red.rankScore = Math.max(1000, red.rankScore + redDelta);
-      black.rankScore = Math.max(1000, black.rankScore + blackDelta);
+      red.rankScore = Math.max(0, red.rankScore + redDelta);
+      black.rankScore = Math.max(0, black.rankScore + blackDelta);
       red.bestRankScore = Math.max(red.bestRankScore, red.rankScore);
       black.bestRankScore = Math.max(black.bestRankScore, black.rankScore);
 
@@ -354,8 +438,8 @@ app.post('/api/match/finish', verifyAdmin, (req, res) => {
       const redBefore = red.matchScore;
       const blackBefore = black.matchScore;
 
-      red.matchScore = Math.max(800, red.matchScore + redDelta);
-      black.matchScore = Math.max(800, black.matchScore + blackDelta);
+      red.matchScore = Math.max(0, red.matchScore + redDelta);
+      black.matchScore = Math.max(0, black.matchScore + blackDelta);
       red.bestMatchScore = Math.max(red.bestMatchScore, red.matchScore);
       black.bestMatchScore = Math.max(black.bestMatchScore, black.matchScore);
 

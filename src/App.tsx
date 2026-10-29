@@ -38,6 +38,9 @@ import {
   Bot,
   Layers,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  FastForward,
   Activity,
   History,
   CheckCircle2,
@@ -124,25 +127,32 @@ export default function App() {
     }
   }, []);
 
-  // Initial load & Polling for shared persistence ("别的admin也会看到你改的东西")
+  // 1-second Live polling for seamless auto-sync without page refresh ("1秒内更新不要刷新")
   useEffect(() => {
     fetchServerState();
-    const interval = setInterval(fetchServerState, 3000);
+    const interval = setInterval(fetchServerState, 1000);
     return () => clearInterval(interval);
   }, [fetchServerState]);
 
-  // Sync board with currentMatch moves
+  // Live in-match step navigation ("按 往前按钮就可以回到你刚刚上一步 如果上一步了就可以下一步直到还没动棋")
+  const [viewStepIndex, setViewStepIndex] = useState<number | null>(null);
+
+  // Sync board with currentMatch moves (or historical step if viewStepIndex is set)
   useEffect(() => {
-    if (currentMatch && currentMatch.moves.length > 0) {
+    const totalMoves = currentMatch?.moves || [];
+    const effectiveStep = viewStepIndex !== null ? viewStepIndex : totalMoves.length;
+
+    if (currentMatch && totalMoves.length > 0 && effectiveStep > 0) {
       let b = createInitialBoard();
-      for (const m of currentMatch.moves) {
+      for (let i = 0; i < effectiveStep && i < totalMoves.length; i++) {
+        const m = totalMoves[i];
         const p = b[m.from[0]][m.from[1]];
         b[m.to[0]][m.to[1]] = p;
         b[m.from[0]][m.from[1]] = null;
       }
       setBoard(b);
 
-      const last = currentMatch.moves[currentMatch.moves.length - 1];
+      const last = totalMoves[effectiveStep - 1];
       setLastMove({
         from: { row: last.from[0], col: last.from[1] },
         to: { row: last.to[0], col: last.to[1] },
@@ -157,7 +167,7 @@ export default function App() {
       setLastMove(null);
       setAiEval(evaluateBoardHeuristic(createInitialBoard()));
     }
-  }, [currentMatch]);
+  }, [currentMatch, viewStepIndex]);
 
   // Handle piece selection on board
   const handleSelectPiece = (pos: Position) => {
@@ -182,6 +192,33 @@ export default function App() {
     }
   };
 
+  // Step navigation variables and handlers
+  const totalMovesCount = currentMatch?.moves.length || 0;
+  const currentStepNum = viewStepIndex !== null ? viewStepIndex : totalMovesCount;
+
+  const handleStepBack = () => {
+    if (currentStepNum > 0) {
+      setViewStepIndex(currentStepNum - 1);
+      setSelectedPos(null);
+      setLegalMoves([]);
+    }
+  };
+
+  const handleStepForward = () => {
+    if (currentStepNum < totalMovesCount) {
+      const next = currentStepNum + 1;
+      setViewStepIndex(next === totalMovesCount ? null : next);
+      setSelectedPos(null);
+      setLegalMoves([]);
+    }
+  };
+
+  const handleResetToLive = () => {
+    setViewStepIndex(null);
+    setSelectedPos(null);
+    setLegalMoves([]);
+  };
+
   // Handle piece move execution
   const handleMoveTo = async (targetPos: Position) => {
     if (!isAdmin || !selectedPos || !currentMatch) return;
@@ -200,8 +237,12 @@ export default function App() {
     const nextColor: PieceColor = activeColor === 'red' ? 'black' : 'red';
     const fen = boardToFen(nextBoard, nextColor);
 
+    const effectiveMoves = (viewStepIndex !== null && currentMatch.moves)
+      ? currentMatch.moves.slice(0, viewStepIndex)
+      : (currentMatch.moves || []);
+
     const moveRecord: MoveRecord = {
-      step: (currentMatch.moves?.length || 0) + 1,
+      step: effectiveMoves.length + 1,
       side: activeColor,
       notation,
       fen,
@@ -212,7 +253,14 @@ export default function App() {
       timestamp: new Date().toISOString(),
     };
 
+    const updatedMatch: MatchRecord = {
+      ...currentMatch,
+      moves: [...effectiveMoves, moveRecord],
+    };
+
     // Optimistic local update
+    setCurrentMatch(updatedMatch);
+    setViewStepIndex(null);
     setBoard(nextBoard);
     setSelectedPos(null);
     setLegalMoves([]);
@@ -234,13 +282,16 @@ export default function App() {
       });
 
       if (res.ok) {
-        const data = await res.json();
-        if (data.success) {
-          setCurrentMatch(data.match);
+        const contentType = res.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+          const data = await res.json();
+          if (data.success) {
+            setCurrentMatch(data.match);
+          }
         }
       }
     } catch (err) {
-      console.error('Error saving move:', err);
+      console.warn('Move recorded locally in offline mode:', err);
     }
 
     // Check if AI detected king capture or checkmate
@@ -348,28 +399,28 @@ export default function App() {
       const red = { ...updatedPlayers[redIdx] };
       const black = { ...updatedPlayers[blackIdx] };
 
-      const delta = winner === 'draw' ? (isRanked ? 5 : 3) : (isRanked ? 25 : 15);
-      const lossDelta = winner === 'draw' ? (isRanked ? -5 : -3) : (isRanked ? -15 : -10);
+      const PLAY_BONUS = 50;
+      const redDelta = winner === 'red' ? PLAY_BONUS + 20 : winner === 'draw' ? PLAY_BONUS + 10 : PLAY_BONUS;
+      const blackDelta = winner === 'black' ? PLAY_BONUS + 20 : winner === 'draw' ? PLAY_BONUS + 10 : PLAY_BONUS;
 
       if (isRanked) {
         red.rankMatches++;
         black.rankMatches++;
+        red.rankScore = Math.max(0, red.rankScore + redDelta);
+        black.rankScore = Math.max(0, black.rankScore + blackDelta);
+        red.bestRankScore = Math.max(red.bestRankScore, red.rankScore);
+        black.bestRankScore = Math.max(black.bestRankScore, black.rankScore);
+
         if (winner === 'red') {
           red.rankWins++;
           red.rankStreak = red.rankStreak > 0 ? red.rankStreak + 1 : 1;
-          red.rankScore += delta;
-          red.bestRankScore = Math.max(red.bestRankScore, red.rankScore);
           black.rankLosses++;
           black.rankStreak = black.rankStreak < 0 ? black.rankStreak - 1 : -1;
-          black.rankScore = Math.max(1000, black.rankScore + lossDelta);
         } else if (winner === 'black') {
           black.rankWins++;
           black.rankStreak = black.rankStreak > 0 ? black.rankStreak + 1 : 1;
-          black.rankScore += delta;
-          black.bestRankScore = Math.max(black.bestRankScore, black.rankScore);
           red.rankLosses++;
           red.rankStreak = red.rankStreak < 0 ? red.rankStreak - 1 : -1;
-          red.rankScore = Math.max(1000, red.rankScore + lossDelta);
         } else {
           red.rankDraws++;
           black.rankDraws++;
@@ -377,22 +428,21 @@ export default function App() {
       } else {
         red.matchMatches++;
         black.matchMatches++;
+        red.matchScore = Math.max(0, red.matchScore + redDelta);
+        black.matchScore = Math.max(0, black.matchScore + blackDelta);
+        red.bestMatchScore = Math.max(red.bestMatchScore, red.matchScore);
+        black.bestMatchScore = Math.max(black.bestMatchScore, black.matchScore);
+
         if (winner === 'red') {
           red.matchWins++;
           red.matchStreak = red.matchStreak > 0 ? red.matchStreak + 1 : 1;
-          red.matchScore += delta;
-          red.bestMatchScore = Math.max(red.bestMatchScore, red.matchScore);
           black.matchLosses++;
           black.matchStreak = black.matchStreak < 0 ? black.matchStreak - 1 : -1;
-          black.matchScore = Math.max(800, black.matchScore + lossDelta);
         } else if (winner === 'black') {
           black.matchWins++;
           black.matchStreak = black.matchStreak > 0 ? black.matchStreak + 1 : 1;
-          black.matchScore += delta;
-          black.bestMatchScore = Math.max(black.bestMatchScore, black.matchScore);
           red.matchLosses++;
           red.matchStreak = red.matchStreak < 0 ? red.matchStreak - 1 : -1;
-          red.matchScore = Math.max(800, red.matchScore + lossDelta);
         } else {
           red.matchDraws++;
           black.matchDraws++;
@@ -523,10 +573,31 @@ export default function App() {
   };
 
   // Admin login success
-  const handleAdminLoginSuccess = (pwd: string) => {
+  const handleAdminLoginSuccess = async (pwd: string) => {
     setAdminPassword(pwd);
     sessionStorage.setItem('chess_admin_token', pwd);
     showToast('裁判管理员认证成功！已解锁记分与执裁权限。', 'success');
+
+    // Automatically sync local players to cloud server so other devices see them
+    if (players.length > 0) {
+      try {
+        const res = await fetch('/api/players/batch-sync', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-admin-password': pwd,
+          },
+          body: JSON.stringify({ players }),
+        });
+        const data = await res.json();
+        if (data.success && data.players) {
+          setPlayers(data.players);
+          showToast(`已将 ${data.players.length} 名成员同步至云端数据库，全设备即时可见！`, 'success');
+        }
+      } catch (err) {
+        console.warn('Batch sync to server error:', err);
+      }
+    }
   };
 
   const handleAdminLogout = () => {
@@ -746,8 +817,8 @@ export default function App() {
             )}
           </div>
 
-          {/* Interactive Chess Board Component */}
-          <div className="flex justify-center items-center py-1">
+          {/* Interactive Chess Board Component & Step Navigator */}
+          <div className="flex flex-col items-center justify-center py-1 gap-2.5">
             <ChessBoard
               board={board}
               selectedPos={selectedPos}
@@ -758,6 +829,64 @@ export default function App() {
               onSelectPiece={handleSelectPiece}
               onMoveTo={handleMoveTo}
             />
+
+            {/* In-Game Step Navigation Controller (用户需求：按往前按钮回到刚刚上一步，下一步直到最新未动棋) */}
+            {currentMatch && currentMatch.moves.length > 0 && (
+              <div className="w-full max-w-[520px] bg-stone-900/95 rounded-2xl p-2.5 sm:p-3 border border-stone-800 shadow-xl flex items-center justify-between gap-2 select-none">
+                <button
+                  type="button"
+                  onClick={handleStepBack}
+                  disabled={currentStepNum <= 0}
+                  className="px-3.5 py-1.5 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-bold border border-stone-700 transition disabled:opacity-30 disabled:pointer-events-none flex items-center gap-1 active:scale-95 shadow"
+                  title="回到你刚刚上一步棋"
+                >
+                  <ChevronLeft className="w-4 h-4 text-amber-400" />
+                  <span>上一步</span>
+                </button>
+
+                <div className="flex flex-col items-center text-center px-1">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-amber-300">
+                    <span>
+                      {viewStepIndex !== null
+                        ? viewStepIndex === 0
+                          ? '开局初始局面 (还没动棋)'
+                          : `正在回看：第 ${viewStepIndex} 手`
+                        : `当前最新：第 ${totalMovesCount} 手`}
+                    </span>
+                  </div>
+                  {viewStepIndex !== null && (
+                    <span className="text-[10px] text-amber-400/90 font-medium">
+                      (历史步数中 · 可点“下一步”或“回到最新”)
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={handleStepForward}
+                    disabled={currentStepNum >= totalMovesCount}
+                    className="px-3.5 py-1.5 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-200 text-xs font-bold border border-stone-700 transition disabled:opacity-30 disabled:pointer-events-none flex items-center gap-1 active:scale-95 shadow"
+                    title="下一步直到最新着法"
+                  >
+                    <span>下一步</span>
+                    <ChevronRight className="w-4 h-4 text-amber-400" />
+                  </button>
+
+                  {viewStepIndex !== null && (
+                    <button
+                      type="button"
+                      onClick={handleResetToLive}
+                      className="px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-500 hover:to-amber-600 text-stone-950 text-xs font-black transition flex items-center gap-1 shadow-md active:scale-95"
+                      title="直接跳回实时对弈最新局面"
+                    >
+                      <FastForward className="w-3.5 h-3.5" />
+                      <span>回到最新</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* AI Referee & Arbiter Control Bar */}
@@ -858,7 +987,14 @@ export default function App() {
             activeTab={leaderboardTab}
             onTabChange={setLeaderboardTab}
             onSelectPlayer={(p) => setSelectedProfilePlayer(p)}
-            onOpenAddMember={() => setShowMemberModal(true)}
+            onOpenAddMember={() => {
+              if (!isAdmin) {
+                showToast('没有管理员身份不可增加成员！请先输入裁判密码认证。', 'error');
+                setShowAdminLogin(true);
+                return;
+              }
+              setShowMemberModal(true);
+            }}
             isAdmin={isAdmin}
           />
 
@@ -940,13 +1076,23 @@ export default function App() {
         onClose={() => setShowMemberModal(false)}
         players={players}
         adminPassword={adminPassword}
+        isAdmin={isAdmin}
+        onRequestAdminLogin={() => setShowAdminLogin(true)}
         onPlayerAdded={(newP, allP) => {
           setPlayers(allP);
-          showToast(`已成功添加棋手 "${newP.name}"`, 'success');
+          showToast(`已成功添加棋手 "${newP.name}"，已同步全设备！`, 'success');
         }}
         onPlayerDeleted={(allP) => {
           setPlayers(allP);
-          showToast('已更新成员名单', 'info');
+          showToast('已更新成员名单并同步', 'info');
+        }}
+        onPlayerUpdated={(updatedP, allP) => {
+          setPlayers(allP);
+          showToast(`已更新「${updatedP.name}」天梯数据并同步至所有设备`, 'success');
+        }}
+        onBatchSyncPlayers={(allP) => {
+          setPlayers(allP);
+          showToast(`已成功同步 ${allP.length} 名成员至云端数据库！`, 'success');
         }}
       />
 
@@ -962,10 +1108,17 @@ export default function App() {
       <PlayerProfileModal
         player={selectedProfilePlayer}
         matchHistory={matchHistory}
+        isAdmin={isAdmin}
+        adminPassword={adminPassword}
         onClose={() => setSelectedProfilePlayer(null)}
         onReplayMatch={(m) => {
           setSelectedProfilePlayer(null);
           setReplayMatch(m);
+        }}
+        onPlayerUpdated={(updatedP) => {
+          setPlayers(prev => prev.map(p => p.id === updatedP.id ? updatedP : p));
+          setSelectedProfilePlayer(updatedP);
+          showToast(`已成功更新「${updatedP.name}」排位分与段位`, 'success');
         }}
       />
 

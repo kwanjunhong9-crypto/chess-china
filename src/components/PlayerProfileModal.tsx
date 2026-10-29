@@ -1,25 +1,39 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { MatchRecord, Player } from '../types/chess';
-import { X, Trophy, Swords, Flame, Award, Calendar, ChevronRight, PlayCircle, Shield } from 'lucide-react';
+import { X, Trophy, Swords, Flame, Award, Calendar, ChevronRight, PlayCircle, Shield, Edit2, Save } from 'lucide-react';
 import { RankEmblem } from './RankEmblem';
-import { getNextTierProgress, getTierByWins } from '../utils/tierSystem';
+import { getNextTierProgress, getTierByScore } from '../utils/tierSystem';
 
 interface Props {
   player: Player | null;
   matchHistory: MatchRecord[];
+  isAdmin?: boolean;
+  adminPassword?: string;
   onClose: () => void;
   onReplayMatch: (match: MatchRecord) => void;
+  onPlayerUpdated?: (player: Player) => void;
 }
 
 export const PlayerProfileModal: React.FC<Props> = ({
   player,
   matchHistory,
+  isAdmin = false,
+  adminPassword = '',
   onClose,
   onReplayMatch,
+  onPlayerUpdated,
 }) => {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editRankScore, setEditRankScore] = useState<number>(0);
+  const [editMatchScore, setEditMatchScore] = useState<number>(0);
+  const [editRankWins, setEditRankWins] = useState<number>(0);
+  const [editRankMatches, setEditRankMatches] = useState<number>(0);
+  const [editTitle, setEditTitle] = useState<string>('');
+  const [loading, setLoading] = useState(false);
+  const [msg, setMsg] = useState<{ text: string; error?: boolean } | null>(null);
+
   if (!player) return null;
 
-  // Filter player's matches
   const playerMatches = matchHistory.filter(
     m => m.redPlayer.id === player.id || m.blackPlayer.id === player.id
   );
@@ -28,10 +42,54 @@ export const PlayerProfileModal: React.FC<Props> = ({
   const totalWins = player.rankWins + player.matchWins;
   const overallWinRate = totalMatches > 0 ? Math.round((totalWins / totalMatches) * 100) : 0;
 
-  // Tier info based on user win ladder requirements
-  const tierProgress = getNextTierProgress(player.rankWins);
+  // Tier info based on score formula
+  const tierProgress = getNextTierProgress(player.rankScore);
   const currentTier = tierProgress.currentTier;
   const nextTier = tierProgress.nextTier;
+
+  const startEdit = () => {
+    setIsEditing(true);
+    setEditRankScore(player.rankScore || 0);
+    setEditMatchScore(player.matchScore || 0);
+    setEditRankWins(player.rankWins || 0);
+    setEditRankMatches(player.rankMatches || 0);
+    setEditTitle(player.title || '');
+    setMsg(null);
+  };
+
+  const saveEdit = async () => {
+    setLoading(true);
+    setMsg(null);
+    try {
+      const res = await fetch('/api/players/update', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-admin-password': adminPassword,
+        },
+        body: JSON.stringify({
+          id: player.id,
+          rankScore: editRankScore,
+          matchScore: editMatchScore,
+          rankWins: editRankWins,
+          rankMatches: editRankMatches,
+          title: editTitle.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setMsg({ text: '修改已保存并同步至所有设备！' });
+        setIsEditing(false);
+        if (onPlayerUpdated) onPlayerUpdated(data.player);
+      } else {
+        setMsg({ text: data.error || '保存失败', error: true });
+      }
+    } catch (err) {
+      setMsg({ text: '保存失败，请检查网络', error: true });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
@@ -48,6 +106,15 @@ export const PlayerProfileModal: React.FC<Props> = ({
                 <span className={`text-xs px-2.5 py-0.5 rounded-full border font-bold ${currentTier.badgeBg} ${currentTier.textColor} ${currentTier.badgeBorder}`}>
                   {currentTier.name} ({currentTier.englishName})
                 </span>
+                {isAdmin && !isEditing && (
+                  <button
+                    onClick={startEdit}
+                    className="text-[11px] px-2 py-0.5 rounded bg-stone-800 hover:bg-stone-700 text-amber-300 border border-stone-700 flex items-center gap-1 font-semibold transition"
+                  >
+                    <Edit2 className="w-3 h-3" />
+                    <span>管理员修改段位分</span>
+                  </button>
+                )}
               </div>
               <p className="text-xs text-stone-400 mt-1">
                 称号：{player.title || '象棋棋手'} · 棋艺入驻：{player.createdAt.split('T')[0]}
@@ -65,8 +132,109 @@ export const PlayerProfileModal: React.FC<Props> = ({
 
         {/* Content Body */}
         <div className="p-5 overflow-y-auto space-y-4 text-sm">
-          
-          {/* Glorious Tier Emblem Banner (Matching user reference photo) */}
+          {msg && (
+            <div
+              className={`p-2.5 rounded-xl text-xs font-medium border ${
+                msg.error
+                  ? 'bg-red-950/60 border-red-500/40 text-red-300'
+                  : 'bg-emerald-950/60 border-emerald-500/40 text-emerald-300'
+              }`}
+            >
+              {msg.text}
+            </div>
+          )}
+
+          {/* Admin Edit Form Modal Section */}
+          {isEditing && (
+            <div className="p-4 rounded-xl bg-stone-950 border border-amber-500/40 space-y-3">
+              <div className="flex justify-between items-center">
+                <span className="text-xs font-bold text-amber-400 flex items-center gap-1">
+                  <Edit2 className="w-3.5 h-3.5" />
+                  <span>管理员修改「{player.name}」天梯数据</span>
+                </span>
+                <span className="text-[10px] text-stone-500">局数 × 10 = 段位分标准</span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 text-xs">
+                <div>
+                  <label className="text-[11px] text-stone-400 block mb-1">
+                    排位天梯分 (目前: {getTierByScore(editRankScore).name})
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={editRankScore}
+                    onChange={(e) => setEditRankScore(Math.max(0, parseInt(e.target.value) || 0))}
+                    className="w-full bg-stone-900 border border-stone-700 rounded-lg px-2.5 py-1.5 text-xs text-amber-300 font-bold focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[11px] text-stone-400 block mb-1">休闲匹配积分</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={editMatchScore}
+                    onChange={(e) => setEditMatchScore(Math.max(0, parseInt(e.target.value) || 0))}
+                    className="w-full bg-stone-900 border border-stone-700 rounded-lg px-2.5 py-1.5 text-xs text-stone-200 focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[11px] text-stone-400 block mb-1">排位胜局数</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={editRankWins}
+                    onChange={(e) => setEditRankWins(Math.max(0, parseInt(e.target.value) || 0))}
+                    className="w-full bg-stone-900 border border-stone-700 rounded-lg px-2.5 py-1.5 text-xs text-stone-200 focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-[11px] text-stone-400 block mb-1">总对局数</label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={editRankMatches}
+                    onChange={(e) => setEditRankMatches(Math.max(0, parseInt(e.target.value) || 0))}
+                    className="w-full bg-stone-900 border border-stone-700 rounded-lg px-2.5 py-1.5 text-xs text-stone-200 focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+
+                <div className="col-span-2">
+                  <label className="text-[11px] text-stone-400 block mb-1">称号头衔</label>
+                  <input
+                    type="text"
+                    value={editTitle}
+                    onChange={(e) => setEditTitle(e.target.value)}
+                    className="w-full bg-stone-900 border border-stone-700 rounded-lg px-2.5 py-1.5 text-xs text-stone-200 focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-stone-800">
+                <button
+                  type="button"
+                  onClick={() => setIsEditing(false)}
+                  className="px-3 py-1.5 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-300 text-xs transition"
+                >
+                  取消
+                </button>
+                <button
+                  type="button"
+                  onClick={saveEdit}
+                  disabled={loading}
+                  className="px-4 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-stone-950 font-bold text-xs flex items-center gap-1.5 transition shadow"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  <span>保存并广播到所有设备</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Glorious Tier Emblem Banner */}
           <div className="relative overflow-hidden rounded-2xl bg-gradient-to-b from-stone-950 via-stone-900 to-stone-950 p-4 border border-stone-800 flex flex-col items-center text-center shadow-inner">
             <div className="absolute inset-0 opacity-10 bg-[radial-gradient(#c084fc_1px,transparent_1px)] [background-size:12px_12px] pointer-events-none" />
 
@@ -78,7 +246,7 @@ export const PlayerProfileModal: React.FC<Props> = ({
                 {currentTier.name} · {currentTier.englishName}
               </span>
               <span className="text-xs text-stone-400">
-                当前段位胜局：<strong className="text-amber-400 font-bold">{player.rankWins}</strong> 局
+                当前排位积分：<strong className="text-amber-400 font-bold">{player.rankScore}</strong> 分 · 胜局：{player.rankWins} 局
               </span>
             </div>
 
@@ -87,11 +255,11 @@ export const PlayerProfileModal: React.FC<Props> = ({
               <div className="flex justify-between items-center text-xs text-stone-400 mb-1.5">
                 <span>
                   {nextTier
-                    ? `晋级至下一段位「${nextTier.name} (${nextTier.englishName})」`
+                    ? `下一段位「${nextTier.name} (${nextTier.englishName})」需 ${nextTier.minScore}分`
                     : '已达最高荣誉「至尊宿敌」'}
                 </span>
                 <span className="font-bold text-amber-300">
-                  {nextTier ? `还需 ${tierProgress.remainingWins} 胜` : '最高段位'}
+                  {nextTier ? `还需 ${tierProgress.remainingScore} 分` : '已达最高峰'}
                 </span>
               </div>
 

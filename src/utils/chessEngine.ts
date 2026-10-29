@@ -65,7 +65,7 @@ export function isInsideBoard(row: number, col: number): boolean {
   return row >= 0 && row < 10 && col >= 0 && col < 9;
 }
 
-// Check if position is inside palace
+// Check if position is inside palace (九宫)
 export function isInsidePalace(row: number, col: number, color: PieceColor): boolean {
   if (col < 3 || col > 5) return false;
   if (color === 'red') {
@@ -75,7 +75,7 @@ export function isInsidePalace(row: number, col: number, color: PieceColor): boo
   }
 }
 
-// Check if King face-to-face (飞将)
+// Check if King face-to-face (飞将/对脸将)
 export function isKingFacing(board: BoardGrid): boolean {
   let redKingPos: Position | null = null;
   let blackKingPos: Position | null = null;
@@ -103,7 +103,140 @@ export function isKingFacing(board: BoardGrid): boolean {
   return true;
 }
 
-// Generate legal moves for a given position
+// Direct attack detection on a target square without recursive legal moves
+export function isSquareUnderAttack(board: BoardGrid, target: Position, attackerColor: PieceColor): boolean {
+  const { row: tr, col: tc } = target;
+
+  // 1. Orthogonal rays: Chariot (R), Cannon (C), and King Face-to-Face (K)
+  const dirs = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+  for (const [dr, dc] of dirs) {
+    let r = tr + dr;
+    let c = tc + dc;
+    let piecesBetween = 0;
+
+    while (r >= 0 && r < 10 && c >= 0 && c < 9) {
+      const p = board[r][c];
+      if (p !== null) {
+        if (p.color === attackerColor) {
+          if (piecesBetween === 0) {
+            // Chariot attacks with 0 obstacles
+            if (p.type === 'R') return true;
+            // King face-to-face along file with 0 obstacles
+            if (p.type === 'K' && dc === 0) return true;
+          } else if (piecesBetween === 1) {
+            // Cannon attacks over exactly 1 piece (screen / 炮架)
+            if (p.type === 'C') return true;
+          }
+        }
+        piecesBetween++;
+        if (piecesBetween > 1) break; // Beyond 1 obstacle, cannon cannot attack either
+      }
+      r += dr;
+      c += dc;
+    }
+  }
+
+  // 2. Horse (N) attacks: check 8 possible origins around target
+  const horseDeltas = [
+    { dr: -2, dc: -1, legR: -1, legC: 0 },
+    { dr: -2, dc: 1, legR: -1, legC: 0 },
+    { dr: 2, dc: -1, legR: 1, legC: 0 },
+    { dr: 2, dc: 1, legR: 1, legC: 0 },
+    { dr: -1, dc: -2, legR: 0, legC: -1 },
+    { dr: 1, dc: -2, legR: 0, legC: -1 },
+    { dr: -1, dc: 2, legR: 0, legC: 1 },
+    { dr: 1, dc: 2, legR: 0, legC: 1 },
+  ];
+  for (const { dr, dc, legR, legC } of horseDeltas) {
+    const hr = tr + dr;
+    const hc = tc + dc;
+    if (hr >= 0 && hr < 10 && hc >= 0 && hc < 9) {
+      const p = board[hr][hc];
+      if (p && p.color === attackerColor && p.type === 'N') {
+        // Horse leg is relative to horse position
+        const lr = hr - legR;
+        const lc = hc - legC;
+        if (board[lr][lc] === null) {
+          return true;
+        }
+      }
+    }
+  }
+
+  // 3. Soldier (P) attacks
+  if (attackerColor === 'red') {
+    // Red soldier moves up (row - 1), so it attacks (tr, tc) from (tr + 1, tc)
+    if (tr + 1 < 10) {
+      const p = board[tr + 1][tc];
+      if (p && p.color === 'red' && p.type === 'P') return true;
+    }
+    // If crossed river (tr <= 4), red soldier can also attack horizontally
+    if (tr <= 4) {
+      if (tc - 1 >= 0) {
+        const p = board[tr][tc - 1];
+        if (p && p.color === 'red' && p.type === 'P') return true;
+      }
+      if (tc + 1 < 9) {
+        const p = board[tr][tc + 1];
+        if (p && p.color === 'red' && p.type === 'P') return true;
+      }
+    }
+  } else {
+    // Black soldier moves down (row + 1), so it attacks (tr, tc) from (tr - 1, tc)
+    if (tr - 1 >= 0) {
+      const p = board[tr - 1][tc];
+      if (p && p.color === 'black' && p.type === 'P') return true;
+    }
+    // If crossed river (tr >= 5), black soldier can also attack horizontally
+    if (tr >= 5) {
+      if (tc - 1 >= 0) {
+        const p = board[tr][tc - 1];
+        if (p && p.color === 'black' && p.type === 'P') return true;
+      }
+      if (tc + 1 < 9) {
+        const p = board[tr][tc + 1];
+        if (p && p.color === 'black' && p.type === 'P') return true;
+      }
+    }
+  }
+
+  // 4. King (K) 1 step in palace
+  const kingDeltas = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+  for (const [dr, dc] of kingDeltas) {
+    const kr = tr + dr;
+    const kc = tc + dc;
+    if (kr >= 0 && kr < 10 && kc >= 0 && kc < 9) {
+      const p = board[kr][kc];
+      if (p && p.color === attackerColor && p.type === 'K') {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+// Check if King of given color is currently in check (将军)
+export function isKingInCheck(board: BoardGrid, color: PieceColor): boolean {
+  let kingPos: Position | null = null;
+  for (let r = 0; r < 10; r++) {
+    for (let c = 0; c < 9; c++) {
+      const p = board[r][c];
+      if (p?.type === 'K' && p.color === color) {
+        kingPos = { row: r, col: c };
+        break;
+      }
+    }
+    if (kingPos) break;
+  }
+
+  if (!kingPos) return true; // Captured / Missing
+
+  const opponentColor: PieceColor = color === 'red' ? 'black' : 'red';
+  return isSquareUnderAttack(board, kingPos, opponentColor);
+}
+
+// Generate legal moves for a given position strictly enforcing Chinese Chess rules
 export function getLegalMoves(board: BoardGrid, pos: Position): Position[] {
   const piece = board[pos.row][pos.col];
   if (!piece) return [];
@@ -116,13 +249,19 @@ export function getLegalMoves(board: BoardGrid, pos: Position): Position[] {
     if (!isInsideBoard(targetRow, targetCol)) return;
     const target = board[targetRow][targetCol];
     if (!target || target.color !== color) {
-      // Simulate move to ensure it doesn't cause King face-to-face
+      // Simulate move to ensure King is never in check and no King face-to-face
       const testBoard = cloneBoard(board);
       testBoard[targetRow][targetCol] = testBoard[row][col];
       testBoard[row][col] = null;
-      if (!isKingFacing(testBoard)) {
-        moves.push({ row: targetRow, col: targetCol });
-      }
+
+      // 1. Prohibit King face-to-face (飞将/对脸将)
+      if (isKingFacing(testBoard)) return;
+
+      // 2. Prohibit leaving or placing own King in check (送将/不可处于被将状态)
+      if (isKingInCheck(testBoard, color)) return;
+
+      // Valid legal move!
+      moves.push({ row: targetRow, col: targetCol });
     }
   };
 
@@ -154,7 +293,7 @@ export function getLegalMoves(board: BoardGrid, pos: Position): Position[] {
     }
 
     case 'B': {
-      // Elephant: diagonal 2 steps, cannot cross river, eye check
+      // Elephant: diagonal 2 steps, cannot cross river, eye check (塞象眼)
       const deltas = [
         { dr: -2, dc: -2, eyeR: -1, eyeC: -1 },
         { dr: -2, dc: 2, eyeR: -1, eyeC: 1 },
@@ -170,7 +309,7 @@ export function getLegalMoves(board: BoardGrid, pos: Position): Position[] {
         if (color === 'red' && nr < 5) return;
         if (color === 'black' && nr > 4) return;
 
-        // Check eye blocking (塞象眼)
+        // Eye blocking check (塞象眼)
         if (board[row + eyeR][col + eyeC] === null) {
           addIfValid(nr, nc);
         }
@@ -347,37 +486,6 @@ export function boardToFen(board: BoardGrid, activeColor: PieceColor = 'red'): s
     rows.push(rowStr);
   }
   return `${rows.join('/')} ${activeColor === 'red' ? 'w' : 'b'} - - 0 1`;
-}
-
-// Check if King is in Check (将军)
-export function isKingInCheck(board: BoardGrid, color: PieceColor): boolean {
-  let kingPos: Position | null = null;
-  for (let r = 0; r < 10; r++) {
-    for (let c = 0; c < 9; c++) {
-      const p = board[r][c];
-      if (p?.type === 'K' && p.color === color) {
-        kingPos = { row: r, col: c };
-        break;
-      }
-    }
-    if (kingPos) break;
-  }
-
-  if (!kingPos) return true; // King captured
-
-  const opponentColor: PieceColor = color === 'red' ? 'black' : 'red';
-  for (let r = 0; r < 10; r++) {
-    for (let c = 0; c < 9; c++) {
-      const p = board[r][c];
-      if (p?.color === opponentColor) {
-        const moves = getLegalMoves(board, { row: r, col: c });
-        if (moves.some(m => m.row === kingPos!.row && m.col === kingPos!.col)) {
-          return true;
-        }
-      }
-    }
-  }
-  return false;
 }
 
 // Generate exportable PGN string

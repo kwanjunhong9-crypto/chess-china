@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Player } from '../types/chess';
 import { Trophy, Medal, Flame, Search, ChevronRight, UserPlus, Users } from 'lucide-react';
 import { RankEmblem } from './RankEmblem';
-import { getTierByWins, TIERS } from '../utils/tierSystem';
+import { getTierByScore, TIERS } from '../utils/tierSystem';
 
 interface Props {
   players: Player[];
@@ -58,11 +58,11 @@ export const Leaderboard: React.FC<Props> = ({
               className="text-[11px] px-2 py-0.5 rounded-full bg-purple-950/70 text-purple-300 border border-purple-500/50 hover:bg-purple-900 transition flex items-center gap-1 font-semibold"
               title="查看段位规则表"
             >
-              <span>段位徽章一览</span>
+              <span>段位规则表</span>
             </button>
           </div>
           <p className="text-xs text-stone-400 mt-0.5">
-            胜场晋级：未排名 ➔ 铜 ➔ 银 ➔ 黄金 ➔ 钻石 ➔ 岩浆 ➔ 宿敌 ➔ 至尊宿敌
+            段位规则：局数×10=段位分 (未排名➔铜➔银➔黄金➔钻石➔岩浆➔宿敌➔至尊宿敌) · 每局+50分
           </p>
         </div>
 
@@ -108,7 +108,7 @@ export const Leaderboard: React.FC<Props> = ({
             {top2 ? (
               <>
                 <div className="mb-1 flex items-center justify-center">
-                  <RankEmblem wins={activeTab === 'ranked' ? top2.rankWins : top2.matchWins} size="sm" />
+                  <RankEmblem score={activeTab === 'ranked' ? top2.rankScore : top2.matchScore} size="sm" />
                 </div>
                 <div className="w-6 h-6 rounded-full bg-slate-300/20 text-slate-300 border border-slate-300/50 flex items-center justify-center font-black text-xs mb-1 shadow">
                   🥈 2
@@ -120,7 +120,7 @@ export const Leaderboard: React.FC<Props> = ({
                   {activeTab === 'ranked' ? top2.rankScore : top2.matchScore}分
                 </span>
                 <span className="text-[10px] text-purple-300 font-semibold mt-0.5">
-                  {getTierByWins(activeTab === 'ranked' ? top2.rankWins : top2.matchWins).name} · {activeTab === 'ranked' ? top2.rankWins : top2.matchWins}胜
+                  {getTierByScore(activeTab === 'ranked' ? top2.rankScore : top2.matchScore).name}
                 </span>
               </>
             ) : (
@@ -140,7 +140,7 @@ export const Leaderboard: React.FC<Props> = ({
             {top1 ? (
               <>
                 <div className="mb-1 flex items-center justify-center">
-                  <RankEmblem wins={activeTab === 'ranked' ? top1.rankWins : top1.matchWins} size="md" />
+                  <RankEmblem score={activeTab === 'ranked' ? top1.rankScore : top1.matchScore} size="md" />
                 </div>
                 <div className="w-7 h-7 rounded-full bg-amber-500/25 text-amber-300 border-2 border-amber-400 flex items-center justify-center font-black text-xs mb-1 shadow-md">
                   🥇 1
@@ -152,7 +152,7 @@ export const Leaderboard: React.FC<Props> = ({
                   {activeTab === 'ranked' ? top1.rankScore : top1.matchScore}分
                 </span>
                 <span className="text-[11px] font-bold text-amber-300 mt-0.5 px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-500/30">
-                  {getTierByWins(activeTab === 'ranked' ? top1.rankWins : top1.matchWins).name} ({activeTab === 'ranked' ? top1.rankWins : top1.matchWins}胜)
+                  {getTierByScore(activeTab === 'ranked' ? top1.rankScore : top1.matchScore).name}
                 </span>
               </>
             ) : (
@@ -172,7 +172,7 @@ export const Leaderboard: React.FC<Props> = ({
             {top3 ? (
               <>
                 <div className="mb-1 flex items-center justify-center">
-                  <RankEmblem wins={activeTab === 'ranked' ? top3.rankWins : top3.matchWins} size="sm" />
+                  <RankEmblem score={activeTab === 'ranked' ? top3.rankScore : top3.matchScore} size="sm" />
                 </div>
                 <div className="w-6 h-6 rounded-full bg-amber-800/30 text-amber-400 border border-amber-700/60 flex items-center justify-center font-black text-xs mb-1 shadow">
                   🥉 3
@@ -184,7 +184,7 @@ export const Leaderboard: React.FC<Props> = ({
                   {activeTab === 'ranked' ? top3.rankScore : top3.matchScore}分
                 </span>
                 <span className="text-[10px] text-amber-400 font-semibold mt-0.5">
-                  {getTierByWins(activeTab === 'ranked' ? top3.rankWins : top3.matchWins).name} · {activeTab === 'ranked' ? top3.rankWins : top3.matchWins}胜
+                  {getTierByScore(activeTab === 'ranked' ? top3.rankScore : top3.matchScore).name}
                 </span>
               </>
             ) : (
@@ -251,7 +251,7 @@ export const Leaderboard: React.FC<Props> = ({
             const losses = activeTab === 'ranked' ? player.rankLosses : player.matchLosses;
             const draws = activeTab === 'ranked' ? player.rankDraws : player.matchDraws;
             const winRate = matches > 0 ? Math.round((wins / matches) * 100) : 0;
-            const tier = getTierByWins(wins);
+            const tier = getTierByScore(score);
 
             return (
               <div
@@ -322,19 +322,23 @@ export const Leaderboard: React.FC<Props> = ({
               <div>
                 <h3 className="text-base font-bold text-stone-100 flex items-center gap-2">
                   <Trophy className="w-4 h-4 text-amber-400" />
-                  <span>象棋天梯 8 大段位勋章体系统</span>
+                  <span>象棋天梯 8 大段位勋章体系 (局数×10=段位分)</span>
                 </h3>
-                <p className="text-xs text-stone-400">累计胜场晋级，飞翼盾徽随段位闪耀升级</p>
+                <p className="text-xs text-stone-400">段位分由局数与每局+50分结算累计，飞翼盾徽随段位晋级升级</p>
               </div>
               <button
                 onClick={() => setShowTierModal(false)}
-                className="text-stone-400 hover:text-white text-xs px-2 py-1 rounded bg-stone-800"
+                className="text-stone-400 hover:text-white text-xs px-2.5 py-1 rounded-lg bg-stone-800"
               >
                 关闭
               </button>
             </div>
 
             <div className="p-4 overflow-y-auto space-y-2.5">
+              <div className="p-2.5 rounded-lg bg-amber-950/40 border border-amber-600/30 text-xs text-amber-300">
+                <strong>段位计分法则：</strong>未排名为10局（10局×10=100分）。玩家每玩1局自动+50分（获胜额外+20分）。青铜为110-200分，白银为210-300分，以此类推。
+              </div>
+
               {TIERS.map((t) => (
                 <div
                   key={t.id}
@@ -356,8 +360,11 @@ export const Leaderboard: React.FC<Props> = ({
                   </div>
 
                   <div className="text-right">
-                    <span className="text-xs font-black text-amber-300">
-                      需胜 {t.minWins} - {t.maxWins > 500 ? '320+' : t.maxWins} 局
+                    <span className="text-xs font-black text-amber-300 block">
+                      {t.minScore} - {t.maxScore > 5000 ? '3200+' : t.maxScore} 分
+                    </span>
+                    <span className="text-[10px] text-stone-500">
+                      基准 {t.minWins} - {t.maxWins > 500 ? '320+' : t.maxWins} 局
                     </span>
                   </div>
                 </div>
