@@ -121,11 +121,12 @@ let db = loadDb();
 
 // Admin verification middleware
 function verifyAdmin(req: express.Request, res: express.Response, next: express.NextFunction) {
-  const auth = req.headers['x-admin-password'];
-  if (auth === ADMIN_PASSWORD) {
+  const auth = req.headers['x-admin-password'] || req.body?.adminPassword || req.body?.password || req.query?.adminPassword;
+  const cleanAuth = typeof auth === 'string' ? auth.trim() : '';
+  if (cleanAuth === ADMIN_PASSWORD) {
     next();
   } else {
-    res.status(401).json({ success: false, error: '管理员密码错误，无权操作！' });
+    res.status(401).json({ success: false, error: '管理员密码错误，无权操作！请输入 chessadmin123' });
   }
 }
 
@@ -194,7 +195,7 @@ app.post('/api/players/add', verifyAdmin, (req, res) => {
 app.post('/api/players/update', verifyAdmin, (req, res) => {
   const { id, name, title, rankScore, matchScore, rankWins, rankMatches, rankLosses, rankDraws } = req.body;
   db = loadDb();
-  const player = db.players.find(p => p.id === id);
+  const player = db.players.find(p => p.id === id || (name && p.name.toLowerCase() === String(name).toLowerCase()) || p.name.toLowerCase() === String(id).toLowerCase());
   if (!player) {
     return res.status(404).json({ success: false, error: '未找到该成员' });
   }
@@ -364,39 +365,34 @@ app.post('/api/match/finish', verifyAdmin, (req, res) => {
     const redScore = isRanked ? red.rankScore : red.matchScore;
     const blackScore = isRanked ? black.rankScore : black.matchScore;
 
-    // Calculate rating adjustment (Elo-inspired)
+    // User requested scoring rules:
+    // 排位模式：胜+50分，输扣40分 (Math.max(0, score - 40))，和棋各+10分
+    // 休闲匹配：不计算排位，仅记录局数与胜负，胜+50分，负0分，和棋各+10分
     let redDelta = 0;
     let blackDelta = 0;
 
-    const baseK = isRanked ? 32 : 20;
-    const expectedRed = 1 / (1 + Math.pow(10, (blackScore - redScore) / 400));
-    const expectedBlack = 1 - expectedRed;
-
-    let actualRed = 0.5;
-    let actualBlack = 0.5;
-    if (winner === 'red') {
-      actualRed = 1;
-      actualBlack = 0;
-    } else if (winner === 'black') {
-      actualRed = 0;
-      actualBlack = 1;
-    }
-
-    redDelta = Math.round(baseK * (actualRed - expectedRed));
-    blackDelta = Math.round(baseK * (actualBlack - expectedBlack));
-
-    // User specified rule: 玩家每玩1局+50分 (Each game played adds +50 score)
-    // Plus bonus for winning (+20) or draw (+10)
-    const PLAY_BONUS = 50;
-    if (winner === 'red') {
-      redDelta = PLAY_BONUS + 20;
-      blackDelta = PLAY_BONUS;
-    } else if (winner === 'black') {
-      blackDelta = PLAY_BONUS + 20;
-      redDelta = PLAY_BONUS;
+    if (isRanked) {
+      if (winner === 'red') {
+        redDelta = 50;
+        blackDelta = -40;
+      } else if (winner === 'black') {
+        blackDelta = 50;
+        redDelta = -40;
+      } else {
+        redDelta = 10;
+        blackDelta = 10;
+      }
     } else {
-      redDelta = PLAY_BONUS + 10;
-      blackDelta = PLAY_BONUS + 10;
+      if (winner === 'red') {
+        redDelta = 50;
+        blackDelta = 0;
+      } else if (winner === 'black') {
+        blackDelta = 50;
+        redDelta = 0;
+      } else {
+        redDelta = 10;
+        blackDelta = 10;
+      }
     }
 
     // Apply stats

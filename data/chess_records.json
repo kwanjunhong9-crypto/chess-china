@@ -3,7 +3,7 @@
     {
       "id": "p_1793281003253_7bzur",
       "name": "KWANJUNHONG",
-      "title": "象棋高手",
+      "title": "新手",
       "createdAt": "2026-10-29T13:36:43.253Z",
       "rankScore": 0,
       "rankMatches": 0,
@@ -83,5 +83,5 @@
   ],
   "currentMatch": null,
   "matchHistory": [],
-  "lastUpdated": "2026-10-29T13:36:51.409Z"
+  "lastUpdated": "2026-10-29T13:46:00.000Z"
 }

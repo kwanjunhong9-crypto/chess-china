@@ -399,9 +399,35 @@ export default function App() {
       const red = { ...updatedPlayers[redIdx] };
       const black = { ...updatedPlayers[blackIdx] };
 
-      const PLAY_BONUS = 50;
-      const redDelta = winner === 'red' ? PLAY_BONUS + 20 : winner === 'draw' ? PLAY_BONUS + 10 : PLAY_BONUS;
-      const blackDelta = winner === 'black' ? PLAY_BONUS + 20 : winner === 'draw' ? PLAY_BONUS + 10 : PLAY_BONUS;
+      // User requested scoring rules:
+      // 排位模式：胜+50分，输扣40分 (Math.max(0, score - 40))，和棋各+10分
+      // 休闲匹配：不计算排位，仅记录局数与胜负，胜+50分，负0分，和棋各+10分
+      let redDelta = 0;
+      let blackDelta = 0;
+
+      if (isRanked) {
+        if (winner === 'red') {
+          redDelta = 50;
+          blackDelta = -40;
+        } else if (winner === 'black') {
+          blackDelta = 50;
+          redDelta = -40;
+        } else {
+          redDelta = 10;
+          blackDelta = 10;
+        }
+      } else {
+        if (winner === 'red') {
+          redDelta = 50;
+          blackDelta = 0;
+        } else if (winner === 'black') {
+          blackDelta = 50;
+          redDelta = 0;
+        } else {
+          redDelta = 10;
+          blackDelta = 10;
+        }
+      }
 
       if (isRanked) {
         red.rankMatches++;
