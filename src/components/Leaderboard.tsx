@@ -108,7 +108,13 @@ export const Leaderboard: React.FC<Props> = ({
             {top2 ? (
               <>
                 <div className="mb-1 flex items-center justify-center">
-                  <RankEmblem score={activeTab === 'ranked' ? top2.rankScore : top2.matchScore} size="sm" />
+                  {activeTab === 'ranked' ? (
+                    <RankEmblem score={top2.rankScore} size="sm" />
+                  ) : (
+                    <div className="w-8 h-8 rounded-full bg-slate-700/60 border border-slate-400/50 flex items-center justify-center text-slate-200">
+                      <Medal className="w-4 h-4" />
+                    </div>
+                  )}
                 </div>
                 <div className="w-6 h-6 rounded-full bg-slate-300/20 text-slate-300 border border-slate-300/50 flex items-center justify-center font-black text-xs mb-1 shadow">
                   🥈 2
@@ -117,18 +123,24 @@ export const Leaderboard: React.FC<Props> = ({
                   {top2.name}
                 </span>
                 <span className="text-amber-400 font-extrabold text-xs sm:text-sm mt-0.5">
-                  {activeTab === 'ranked' ? top2.rankScore : top2.matchScore}分
+                  {activeTab === 'ranked' ? `${top2.rankScore}分` : `${top2.matchScore}分`}
                 </span>
-                <span className="text-[10px] text-purple-300 font-semibold mt-0.5">
-                  {getTierByScore(activeTab === 'ranked' ? top2.rankScore : top2.matchScore).name}
-                </span>
+                {activeTab === 'ranked' ? (
+                  <span className="text-[10px] text-purple-300 font-semibold mt-0.5">
+                    {getTierByScore(top2.rankScore).name}
+                  </span>
+                ) : (
+                  <span className="text-[10px] text-stone-400 mt-0.5">
+                    胜率 {top2.matchMatches ? Math.round((top2.matchWins / top2.matchMatches) * 100) : 0}%
+                  </span>
+                )}
               </>
             ) : (
               <span className="text-xs text-stone-500 py-6">虚位以待</span>
             )}
           </div>
 
-          {/* Top 1 - Gold (Elevated with Grand Wings) */}
+          {/* Top 1 - Gold */}
           <div
             onClick={() => top1 && onSelectPlayer(top1)}
             className={`relative rounded-xl p-3 sm:p-3.5 flex flex-col items-center text-center transition cursor-pointer border -translate-y-2 shadow-lg shadow-amber-950/40 ${
@@ -140,7 +152,13 @@ export const Leaderboard: React.FC<Props> = ({
             {top1 ? (
               <>
                 <div className="mb-1 flex items-center justify-center">
-                  <RankEmblem score={activeTab === 'ranked' ? top1.rankScore : top1.matchScore} size="md" />
+                  {activeTab === 'ranked' ? (
+                    <RankEmblem score={top1.rankScore} size="md" />
+                  ) : (
+                    <div className="w-10 h-10 rounded-full bg-amber-600/30 border-2 border-amber-400 flex items-center justify-center text-amber-300 shadow">
+                      <Trophy className="w-5 h-5" />
+                    </div>
+                  )}
                 </div>
                 <div className="w-7 h-7 rounded-full bg-amber-500/25 text-amber-300 border-2 border-amber-400 flex items-center justify-center font-black text-xs mb-1 shadow-md">
                   🥇 1
@@ -149,11 +167,17 @@ export const Leaderboard: React.FC<Props> = ({
                   {top1.name}
                 </span>
                 <span className="text-amber-400 font-black text-base sm:text-lg mt-0.5">
-                  {activeTab === 'ranked' ? top1.rankScore : top1.matchScore}分
+                  {activeTab === 'ranked' ? `${top1.rankScore}分` : `${top1.matchScore}分`}
                 </span>
-                <span className="text-[11px] font-bold text-amber-300 mt-0.5 px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-500/30">
-                  {getTierByScore(activeTab === 'ranked' ? top1.rankScore : top1.matchScore).name}
-                </span>
+                {activeTab === 'ranked' ? (
+                  <span className="text-[11px] font-bold text-amber-300 mt-0.5 px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-500/30">
+                    {getTierByScore(top1.rankScore).name}
+                  </span>
+                ) : (
+                  <span className="text-[11px] text-stone-300 mt-0.5 px-2 py-0.5 rounded-full bg-stone-800 border border-stone-700">
+                    {top1.matchWins}胜 · 胜率 {top1.matchMatches ? Math.round((top1.matchWins / top1.matchMatches) * 100) : 0}%
+                  </span>
+                )}
               </>
             ) : (
               <span className="text-xs text-stone-500 py-8">虚位以待</span>
@@ -172,7 +196,13 @@ export const Leaderboard: React.FC<Props> = ({
             {top3 ? (
               <>
                 <div className="mb-1 flex items-center justify-center">
-                  <RankEmblem score={activeTab === 'ranked' ? top3.rankScore : top3.matchScore} size="sm" />
+                  {activeTab === 'ranked' ? (
+                    <RankEmblem score={top3.rankScore} size="sm" />
+                  ) : (
+                    <div className="w-8 h-8 rounded-full bg-amber-900/40 border border-amber-700/60 flex items-center justify-center text-amber-400">
+                      <Medal className="w-4 h-4" />
+                    </div>
+                  )}
                 </div>
                 <div className="w-6 h-6 rounded-full bg-amber-800/30 text-amber-400 border border-amber-700/60 flex items-center justify-center font-black text-xs mb-1 shadow">
                   🥉 3
@@ -181,11 +211,17 @@ export const Leaderboard: React.FC<Props> = ({
                   {top3.name}
                 </span>
                 <span className="text-amber-400 font-extrabold text-xs sm:text-sm mt-0.5">
-                  {activeTab === 'ranked' ? top3.rankScore : top3.matchScore}分
+                  {activeTab === 'ranked' ? `${top3.rankScore}分` : `${top3.matchScore}分`}
                 </span>
-                <span className="text-[10px] text-amber-400 font-semibold mt-0.5">
-                  {getTierByScore(activeTab === 'ranked' ? top3.rankScore : top3.matchScore).name}
-                </span>
+                {activeTab === 'ranked' ? (
+                  <span className="text-[10px] text-amber-400 font-semibold mt-0.5">
+                    {getTierByScore(top3.rankScore).name}
+                  </span>
+                ) : (
+                  <span className="text-[10px] text-stone-400 mt-0.5">
+                    胜率 {top3.matchMatches ? Math.round((top3.matchWins / top3.matchMatches) * 100) : 0}%
+                  </span>
+                )}
               </>
             ) : (
               <span className="text-xs text-stone-500 py-6">虚位以待</span>
@@ -275,26 +311,47 @@ export const Leaderboard: React.FC<Props> = ({
                     {index + 1}
                   </span>
 
-                  {/* Tier Winged Shield Emblem */}
-                  <div className="shrink-0 flex items-center justify-center">
-                    <RankEmblem tier={tier} size="xs" />
-                  </div>
+                  {/* Rank Piece Emblem in Ranked mode; Avatar in Match mode */}
+                  {activeTab === 'ranked' ? (
+                    <div className="shrink-0 flex items-center justify-center">
+                      <RankEmblem tier={tier} size="xs" />
+                    </div>
+                  ) : (
+                    <div className="w-6 h-6 rounded-full bg-stone-800 border border-stone-700 flex items-center justify-center text-xs font-bold text-amber-200 shrink-0">
+                      {player.name.slice(0, 1)}
+                    </div>
+                  )}
 
                   <div>
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <span className="font-bold text-sm text-stone-200 group-hover:text-amber-300 transition">
                         {player.name}
                       </span>
-                      <span className={`text-[10px] px-2 py-0.5 rounded-full border font-bold ${tier.badgeBg} ${tier.textColor} ${tier.badgeBorder}`}>
-                        {tier.name} · {tier.englishName}
-                      </span>
+                      {activeTab === 'ranked' ? (
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full border font-bold ${tier.badgeBg} ${tier.textColor} ${tier.badgeBorder}`}>
+                          {tier.name} · {tier.englishName}
+                        </span>
+                      ) : (
+                        <span className="text-[10px] px-1.5 py-0.2 rounded bg-stone-800 text-stone-400 border border-stone-700">
+                          {player.title || '棋手'}
+                        </span>
+                      )}
                     </div>
                     <div className="text-[11px] text-stone-500 flex items-center gap-2 mt-0.5">
                       <span>{matches}战 {wins}胜{losses}负{draws}和</span>
                       <span>·</span>
                       <span>胜率 {winRate}%</span>
-                      <span>·</span>
-                      <span className="text-amber-400/80">{wins}局胜利</span>
+                      {activeTab === 'ranked' ? (
+                        <>
+                          <span>·</span>
+                          <span className="text-amber-400/80">{wins}局胜利</span>
+                        </>
+                      ) : (
+                        <>
+                          <span>·</span>
+                          <span className="text-stone-400">点击查看个人资料</span>
+                        </>
+                      )}
                     </div>
                   </div>
                 </div>

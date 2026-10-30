@@ -1,6 +1,6 @@
 import React from 'react';
 import { BoardGrid, PieceColor, Position } from '../types/chess';
-import { PIECE_NAMES, isKingInCheck } from '../utils/chessEngine';
+import { PIECE_NAMES, isKingInCheck, getAllLegalMoves } from '../utils/chessEngine';
 
 interface Props {
   board: BoardGrid;
@@ -27,6 +27,9 @@ export const ChessBoard: React.FC<Props> = ({
 }) => {
   const redInCheck = isKingInCheck(board, 'red');
   const blackInCheck = isKingInCheck(board, 'black');
+  const activeLegalCount = getAllLegalMoves(board, activeColor).length;
+  const isCheckmated = activeLegalCount === 0 && (activeColor === 'red' ? redInCheck : blackInCheck);
+  const isStalemated = activeLegalCount === 0 && !(activeColor === 'red' ? redInCheck : blackInCheck);
 
   // Handle intersection click
   const handleIntersectionClick = (r: number, c: number) => {
@@ -216,6 +219,24 @@ export const ChessBoard: React.FC<Props> = ({
             )}
           </div>
         </div>
+
+        {/* Checkmate / Stalemate / Check Alert Banner */}
+        {(isCheckmated || isStalemated || redInCheck || blackInCheck) && (
+          <div className="mt-2.5 px-3 py-1.5 rounded-lg bg-red-950/80 border border-red-500/60 text-red-200 text-xs font-bold flex items-center justify-between animate-pulse shadow-md">
+            <span>
+              {isCheckmated
+                ? `⚡ 绝杀将死！${activeColor === 'red' ? '红方' : '黑方'}无棋可逃亦无子能挡，攻方胜出！`
+                : isStalemated
+                ? `⚠️ 困毙裁决！${activeColor === 'red' ? '红方' : '黑方'}无路可走依例判负！`
+                : redInCheck
+                ? '⚔️ 红方主帅正被将军！请走棋化解！'
+                : '⚔️ 黑方主将正被将军！请走棋化解！'}
+            </span>
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-800 text-white font-mono">
+              {isCheckmated ? '将死' : isStalemated ? '困毙' : '将军'}
+            </span>
+          </div>
+        )}
 
         {/* Board Bottom Coordinates Label Bar */}
         <div className="mt-2 flex justify-between px-3 text-[11px] sm:text-xs text-amber-200/80 font-serif">

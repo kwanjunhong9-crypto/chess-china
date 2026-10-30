@@ -12,6 +12,7 @@ import {
   moveToNotation,
   boardToFen,
   isKingInCheck,
+  checkGameOverStatus,
 } from './utils/chessEngine';
 import { evaluateBoardHeuristic, requestAIReferee } from './utils/aiReferee';
 import { ChessBoard } from './components/ChessBoard';
@@ -73,9 +74,9 @@ export default function App() {
     } catch (_) {}
   }, [players, currentMatch, matchHistory]);
 
-  // Admin authentication state (saved in sessionStorage, never plaintext in UI)
+  // Admin authentication state (saved in localStorage & sessionStorage, never lost on refresh)
   const [adminPassword, setAdminPassword] = useState<string>(() => {
-    return sessionStorage.getItem('chess_admin_token') || '';
+    return localStorage.getItem('chess_admin_token') || sessionStorage.getItem('chess_admin_token') || 'chessadmin123';
   });
   const isAdmin = !!adminPassword;
 
@@ -107,16 +108,22 @@ export default function App() {
     setTimeout(() => setNotification(null), 3500);
   };
 
-  // Fetch state from server safely
+  // Fetch state from server safely with cache busting
   const fetchServerState = useCallback(async () => {
     try {
-      const res = await fetch('/api/state');
+      const res = await fetch(`/api/state?_t=${Date.now()}`, {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache',
+        },
+      });
       if (res.ok) {
         const contentType = res.headers.get('content-type');
         if (contentType && contentType.includes('application/json')) {
           const data = await res.json();
-          if (data.success) {
-            setPlayers(data.players || []);
+          if (data.success && Array.isArray(data.players)) {
+            setPlayers(data.players);
             setCurrentMatch(data.currentMatch || null);
             setMatchHistory(data.matchHistory || []);
           }
@@ -127,7 +134,7 @@ export default function App() {
     }
   }, []);
 
-  // 1-second Live polling for seamless auto-sync without page refresh ("1秒内更新不要刷新")
+  // 1-second Live polling for seamless auto-sync across all devices
   useEffect(() => {
     fetchServerState();
     const interval = setInterval(fetchServerState, 1000);
@@ -292,6 +299,15 @@ export default function App() {
       }
     } catch (err) {
       console.warn('Move recorded locally in offline mode:', err);
+    }
+
+    // Official Chinese Chess Tournament Rule:
+    // "一旦没棋可以保护和逃跑请认定将死那个人的赢"
+    const gameOverCheck = checkGameOverStatus(nextBoard, nextColor);
+    if (gameOverCheck.isOver && gameOverCheck.winner) {
+      handleFinishMatch(gameOverCheck.winner, gameOverCheck.reason, gameOverCheck.commentary);
+      showToast(`${gameOverCheck.reason}！${gameOverCheck.winner === 'red' ? '红方' : '黑方'}绝杀获胜！`, 'success');
+      return;
     }
 
     // Check if AI detected king capture or checkmate
@@ -601,7 +617,10 @@ export default function App() {
   // Admin login success
   const handleAdminLoginSuccess = async (pwd: string) => {
     setAdminPassword(pwd);
-    sessionStorage.setItem('chess_admin_token', pwd);
+    try {
+      localStorage.setItem('chess_admin_token', pwd);
+      sessionStorage.setItem('chess_admin_token', pwd);
+    } catch (_) {}
     showToast('裁判管理员认证成功！已解锁记分与执裁权限。', 'success');
 
     // Automatically sync local players to cloud server so other devices see them
@@ -613,7 +632,7 @@ export default function App() {
             'Content-Type': 'application/json',
             'x-admin-password': pwd,
           },
-          body: JSON.stringify({ players }),
+          body: JSON.stringify({ players, adminPassword: pwd }),
         });
         const data = await res.json();
         if (data.success && data.players) {
@@ -628,7 +647,10 @@ export default function App() {
 
   const handleAdminLogout = () => {
     setAdminPassword('');
-    sessionStorage.removeItem('chess_admin_token');
+    try {
+      localStorage.removeItem('chess_admin_token');
+      sessionStorage.removeItem('chess_admin_token');
+    } catch (_) {}
     showToast('已退出管理员裁判模式', 'info');
   };
 

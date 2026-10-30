@@ -236,6 +236,78 @@ export function isKingInCheck(board: BoardGrid, color: PieceColor): boolean {
   return isSquareUnderAttack(board, kingPos, opponentColor);
 }
 
+// Get all legal moves for a given side across the entire board
+export function getAllLegalMoves(board: BoardGrid, color: PieceColor): Array<{ from: Position; to: Position }> {
+  const allMoves: Array<{ from: Position; to: Position }> = [];
+  for (let r = 0; r < 10; r++) {
+    for (let c = 0; c < 9; c++) {
+      const piece = board[r][c];
+      if (piece && piece.color === color) {
+        const moves = getLegalMoves(board, { row: r, col: c });
+        for (const m of moves) {
+          allMoves.push({ from: { row: r, col: c }, to: m });
+        }
+      }
+    }
+  }
+  return allMoves;
+}
+
+// Detect game over status: Checkmate (将死) or Stalemate (困毙)
+// "一旦没棋可以保护和逃跑请认定将死那个人的赢"
+export function checkGameOverStatus(
+  board: BoardGrid,
+  nextTurnColor: PieceColor
+): {
+  isOver: boolean;
+  winner: PieceColor | null;
+  isCheckmate: boolean;
+  isStalemate: boolean;
+  reason: string;
+  commentary: string;
+} {
+  const legalMoves = getAllLegalMoves(board, nextTurnColor);
+  if (legalMoves.length > 0) {
+    return {
+      isOver: false,
+      winner: null,
+      isCheckmate: false,
+      isStalemate: false,
+      reason: '',
+      commentary: '',
+    };
+  }
+
+  // 0 legal moves available: the defending player has no moves to run or defend
+  const winnerColor: PieceColor = nextTurnColor === 'red' ? 'black' : 'red';
+  const inCheck = isKingInCheck(board, nextTurnColor);
+
+  const defenderName = nextTurnColor === 'red' ? '红方' : '黑方';
+  const winnerName = winnerColor === 'red' ? '红方' : '黑方';
+
+  if (inCheck) {
+    // Checkmate (将死/绝杀)
+    return {
+      isOver: true,
+      winner: winnerColor,
+      isCheckmate: true,
+      isStalemate: false,
+      reason: `绝杀将死 (${defenderName}无棋可逃亦无子能挡)`,
+      commentary: `${winnerName}雷霆重炮/兵马绝杀，${defenderName}主帅无路可逃且无棋能救，${winnerName}绝杀获胜！`,
+    };
+  } else {
+    // Stalemate (困毙: 中国象棋规则中，无子可走方判负)
+    return {
+      isOver: true,
+      winner: winnerColor,
+      isCheckmate: false,
+      isStalemate: true,
+      reason: `困毙裁决 (${defenderName}全盘无子可动亦判负)`,
+      commentary: `${winnerName}封锁要道，${defenderName}虽未被将军但已无子可动（困毙），依象棋正规赛例裁定${winnerName}胜！`,
+    };
+  }
+}
+
 // Generate legal moves for a given position strictly enforcing Chinese Chess rules
 export function getLegalMoves(board: BoardGrid, pos: Position): Position[] {
   const piece = board[pos.row][pos.col];

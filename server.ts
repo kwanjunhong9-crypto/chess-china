@@ -112,6 +112,7 @@ function saveDb(data: DatabaseSchema) {
     }
     data.lastUpdated = new Date().toISOString();
     fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2), 'utf-8');
+    console.log(`[DB] Successfully saved ${data.players.length} players to ${DB_FILE}`);
   } catch (err) {
     console.error('Error saving db file:', err);
   }
@@ -119,9 +120,22 @@ function saveDb(data: DatabaseSchema) {
 
 let db = loadDb();
 
+// Cache-control middleware for all API endpoints to guarantee instant multi-device sync
+app.use('/api', (req, res, next) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.set('Pragma', 'no-cache');
+  res.set('Expires', '0');
+  res.set('Surrogate-Control', 'no-store');
+  next();
+});
+
 // Admin verification middleware
 function verifyAdmin(req: express.Request, res: express.Response, next: express.NextFunction) {
-  const auth = req.headers['x-admin-password'] || req.body?.adminPassword || req.body?.password || req.query?.adminPassword;
+  const auth = req.headers['x-admin-password'] ||
+    req.body?.adminPassword ||
+    req.body?.password ||
+    req.query?.adminPassword ||
+    (req.headers.authorization && req.headers.authorization.replace(/^Bearer\s+/i, ''));
   const cleanAuth = typeof auth === 'string' ? auth.trim() : '';
   if (cleanAuth === ADMIN_PASSWORD) {
     next();
