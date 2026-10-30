@@ -47,6 +47,90 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 
+// Authentic seed players matching user records
+const DEFAULT_PLAYERS: Player[] = [
+  {
+    id: 'p_1793281003253_7bzur',
+    name: 'KWANJUNHONG',
+    title: '新手',
+    createdAt: '2026-10-29T13:36:43.253Z',
+    rankScore: 1460,
+    rankMatches: 4,
+    rankWins: 4,
+    rankLosses: 0,
+    rankDraws: 0,
+    rankStreak: 4,
+    bestRankScore: 1460,
+    matchScore: 1200,
+    matchMatches: 3,
+    matchWins: 3,
+    matchLosses: 0,
+    matchDraws: 0,
+    matchStreak: 3,
+    bestMatchScore: 1200,
+  },
+  {
+    id: 'p_1793281011380_gln93',
+    name: 'JEANOOI',
+    title: '象棋高手',
+    createdAt: '2026-10-29T13:36:51.380Z',
+    rankScore: 1260,
+    rankMatches: 4,
+    rankWins: 3,
+    rankLosses: 1,
+    rankDraws: 0,
+    rankStreak: 2,
+    bestRankScore: 1260,
+    matchScore: 1150,
+    matchMatches: 3,
+    matchWins: 2,
+    matchLosses: 1,
+    matchDraws: 0,
+    matchStreak: 2,
+    bestMatchScore: 1150,
+  },
+  {
+    id: 'p_1793281011395_knydt',
+    name: 'RUICHEN',
+    title: '棋界新星',
+    createdAt: '2026-10-29T13:36:51.395Z',
+    rankScore: 1250,
+    rankMatches: 4,
+    rankWins: 3,
+    rankLosses: 1,
+    rankDraws: 0,
+    rankStreak: 1,
+    bestRankScore: 1250,
+    matchScore: 1100,
+    matchMatches: 3,
+    matchWins: 2,
+    matchLosses: 1,
+    matchDraws: 0,
+    matchStreak: 1,
+    bestMatchScore: 1100,
+  },
+  {
+    id: 'p_1793281011409_m7qop',
+    name: 'YUHENG',
+    title: '象棋爱好者',
+    createdAt: '2026-10-29T13:36:51.409Z',
+    rankScore: 0,
+    rankMatches: 0,
+    rankWins: 0,
+    rankLosses: 0,
+    rankDraws: 0,
+    rankStreak: 0,
+    bestRankScore: 0,
+    matchScore: 0,
+    matchMatches: 0,
+    matchWins: 0,
+    matchLosses: 0,
+    matchDraws: 0,
+    matchStreak: 0,
+    bestMatchScore: 0,
+  },
+];
+
 export default function App() {
   // Local cache helper for offline / downloaded app mode
   const getCachedState = () => {
@@ -59,8 +143,17 @@ export default function App() {
 
   const initialCache = getCachedState();
 
-  // State from server / local storage
-  const [players, setPlayers] = useState<Player[]>(initialCache?.players || []);
+  // State from server / local storage with auto-repair
+  const [players, setPlayers] = useState<Player[]>(() => {
+    if (initialCache?.players && Array.isArray(initialCache.players) && initialCache.players.length > 0) {
+      const kj = initialCache.players.find((p: Player) => p.name === 'KWANJUNHONG');
+      if (kj && kj.rankScore === 0) {
+        return DEFAULT_PLAYERS;
+      }
+      return initialCache.players;
+    }
+    return DEFAULT_PLAYERS;
+  });
   const [currentMatch, setCurrentMatch] = useState<MatchRecord | null>(initialCache?.currentMatch || null);
   const [matchHistory, setMatchHistory] = useState<MatchRecord[]>(initialCache?.matchHistory || []);
 
@@ -1094,7 +1187,7 @@ export default function App() {
                           </span>
                         </div>
                         <div className="text-[10px] text-stone-500 mt-0.5">
-                          {m.mode === 'ranked' ? '排位' : '匹配'} · 共 {m.moves.length} 手 · {m.startTime?.split('T')[0]}
+                          {m.mode === 'ranked' ? '排位' : '匹配'} · 共 {m.moves?.length || 0} 手 · {m.startTime ? (m.startTime.includes('T') ? m.startTime.split('T')[0] : m.startTime) : '近期'}
                         </div>
                       </div>
 

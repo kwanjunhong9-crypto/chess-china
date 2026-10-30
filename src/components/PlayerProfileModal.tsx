@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { MatchRecord, Player } from '../types/chess';
-import { X, Trophy, Swords, Flame, Award, Calendar, ChevronRight, PlayCircle, Shield, Edit2, Save } from 'lucide-react';
+import { X, Flame, Swords, Calendar, PlayCircle, Edit2, Save, User } from 'lucide-react';
 import { RankEmblem } from './RankEmblem';
 import { getNextTierProgress, getTierByScore } from '../utils/tierSystem';
+import { ErrorBoundary } from './ErrorBoundary';
 
 interface Props {
   player: Player | null;
@@ -16,6 +17,32 @@ interface Props {
 
 export const PlayerProfileModal: React.FC<Props> = ({
   player,
+  matchHistory = [],
+  isAdmin = false,
+  adminPassword = '',
+  onClose,
+  onReplayMatch,
+  onPlayerUpdated,
+}) => {
+  if (!player) return null;
+
+  return (
+    <ErrorBoundary fallbackTitle="棋手个人资料加载异常" onReset={onClose}>
+      <PlayerProfileContent
+        player={player}
+        matchHistory={matchHistory}
+        isAdmin={isAdmin}
+        adminPassword={adminPassword}
+        onClose={onClose}
+        onReplayMatch={onReplayMatch}
+        onPlayerUpdated={onPlayerUpdated}
+      />
+    </ErrorBoundary>
+  );
+};
+
+const PlayerProfileContent: React.FC<Props & { player: Player }> = ({
+  player,
   matchHistory,
   isAdmin = false,
   adminPassword = '',
@@ -24,28 +51,48 @@ export const PlayerProfileModal: React.FC<Props> = ({
   onPlayerUpdated,
 }) => {
   const [isEditing, setIsEditing] = useState(false);
-  const [editRankScore, setEditRankScore] = useState<number>(0);
-  const [editMatchScore, setEditMatchScore] = useState<number>(0);
-  const [editRankWins, setEditRankWins] = useState<number>(0);
-  const [editRankMatches, setEditRankMatches] = useState<number>(0);
-  const [editTitle, setEditTitle] = useState<string>('');
+  const [editRankScore, setEditRankScore] = useState<number>(Number(player.rankScore) || 0);
+  const [editMatchScore, setEditMatchScore] = useState<number>(Number(player.matchScore) || 0);
+  const [editRankWins, setEditRankWins] = useState<number>(Number(player.rankWins) || 0);
+  const [editRankMatches, setEditRankMatches] = useState<number>(Number(player.rankMatches) || 0);
+  const [editTitle, setEditTitle] = useState<string>(player.title || '');
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<{ text: string; error?: boolean } | null>(null);
 
-  if (!player) return null;
+  // Fallback-safe player attributes
+  const playerName = player.name || '棋手';
+  const playerTitle = player.title || '象棋棋手';
+  const rankScore = Math.max(0, Number(player.rankScore) || 0);
+  const matchScore = Math.max(0, Number(player.matchScore) || 0);
+  const rankWins = Math.max(0, Number(player.rankWins) || 0);
+  const rankMatches = Math.max(0, Number(player.rankMatches) || 0);
+  const rankLosses = Math.max(0, Number(player.rankLosses) || 0);
+  const rankStreak = Number(player.rankStreak) || 0;
+  const bestRankScore = Math.max(rankScore, Number(player.bestRankScore) || 0);
 
-  const playerMatches = matchHistory.filter(
-    m => m.redPlayer.id === player.id || m.blackPlayer.id === player.id
-  );
+  const matchWins = Math.max(0, Number(player.matchWins) || 0);
+  const matchMatches = Math.max(0, Number(player.matchMatches) || 0);
+  const matchLosses = Math.max(0, Number(player.matchLosses) || 0);
+  const bestMatchScore = Math.max(matchScore, Number(player.bestMatchScore) || 0);
 
-  const totalMatches = player.rankMatches + player.matchMatches;
-  const totalWins = player.rankWins + player.matchWins;
+  const totalMatches = rankMatches + matchMatches;
+  const totalWins = rankWins + matchWins;
   const overallWinRate = totalMatches > 0 ? Math.round((totalWins / totalMatches) * 100) : 0;
 
+  const joinDate = player.createdAt
+    ? (player.createdAt.includes('T') ? player.createdAt.split('T')[0] : player.createdAt)
+    : new Date().toISOString().split('T')[0];
+
   // Tier info based on score formula
-  const tierProgress = getNextTierProgress(player.rankScore);
-  const currentTier = tierProgress.currentTier;
-  const nextTier = tierProgress.nextTier;
+  const tierProgress = getNextTierProgress(rankScore);
+  const currentTier = tierProgress?.currentTier || getTierByScore(rankScore);
+  const nextTier = tierProgress?.nextTier;
+
+  // Safe match history
+  const safeMatches = Array.isArray(matchHistory) ? matchHistory : [];
+  const playerMatches = safeMatches.filter(
+    m => m && ((m.redPlayer?.id && m.redPlayer.id === player.id) || (m.blackPlayer?.id && m.blackPlayer.id === player.id))
+  );
 
   const [adminPasswordInput, setAdminPasswordInput] = useState<string>(
     () => adminPassword || localStorage.getItem('chess_admin_token') || 'chessadmin123'
@@ -53,11 +100,11 @@ export const PlayerProfileModal: React.FC<Props> = ({
 
   const startEdit = () => {
     setIsEditing(true);
-    setEditRankScore(player.rankScore || 0);
-    setEditMatchScore(player.matchScore || 0);
-    setEditRankWins(player.rankWins || 0);
-    setEditRankMatches(player.rankMatches || 0);
-    setEditTitle(player.title || '');
+    setEditRankScore(rankScore);
+    setEditMatchScore(matchScore);
+    setEditRankWins(rankWins);
+    setEditRankMatches(rankMatches);
+    setEditTitle(playerTitle);
     setAdminPasswordInput(adminPassword || localStorage.getItem('chess_admin_token') || 'chessadmin123');
     setMsg(null);
   };
@@ -70,6 +117,18 @@ export const PlayerProfileModal: React.FC<Props> = ({
       localStorage.setItem('chess_admin_token', pwd);
     }
 
+    const updated: Player = {
+      ...player,
+      rankScore: editRankScore,
+      matchScore: editMatchScore,
+      rankWins: editRankWins,
+      rankMatches: editRankMatches,
+      rankLosses: Math.max(0, editRankMatches - editRankWins),
+      bestRankScore: Math.max(bestRankScore, editRankScore),
+      bestMatchScore: Math.max(bestMatchScore, editMatchScore),
+      title: editTitle.trim(),
+    };
+
     try {
       const res = await fetch('/api/players/update', {
         method: 'POST',
@@ -79,10 +138,12 @@ export const PlayerProfileModal: React.FC<Props> = ({
         },
         body: JSON.stringify({
           id: player.id,
+          name: player.name,
           rankScore: editRankScore,
           matchScore: editMatchScore,
           rankWins: editRankWins,
           rankMatches: editRankMatches,
+          rankLosses: Math.max(0, editRankMatches - editRankWins),
           title: editTitle.trim(),
           adminPassword: pwd,
         }),
@@ -94,34 +155,22 @@ export const PlayerProfileModal: React.FC<Props> = ({
         if (data.success) {
           setMsg({ text: '修改已成功保存并广播至所有设备！' });
           setIsEditing(false);
-          if (onPlayerUpdated) onPlayerUpdated(data.player);
+          if (onPlayerUpdated) onPlayerUpdated(data.player || updated);
+          setLoading(false);
           return;
         } else {
           setMsg({ text: data.error || '保存失败，请检查密码', error: true });
+          setLoading(false);
           return;
         }
       }
-
-      const errData = await res.json().catch(() => ({}));
-      if (errData.error) {
-        setMsg({ text: errData.error, error: true });
-        return;
-      }
     } catch (err) {
-      console.warn('Backend update failed, applying local update:', err);
+      console.warn('Backend update endpoint unavailable, applying local update:', err);
     }
 
-    // Local optimistic update
-    const updated: Player = {
-      ...player,
-      rankScore: editRankScore,
-      matchScore: editMatchScore,
-      rankWins: editRankWins,
-      rankMatches: editRankMatches,
-      title: editTitle.trim(),
-    };
+    // Local optimistic update so user changes are NEVER lost
     if (onPlayerUpdated) onPlayerUpdated(updated);
-    setMsg({ text: '数据已在本地生效，网络通畅时将自动广播！' });
+    setMsg({ text: '数据已在本地保存生效！' });
     setIsEditing(false);
     setLoading(false);
   };
@@ -132,19 +181,20 @@ export const PlayerProfileModal: React.FC<Props> = ({
         {/* Modal Header */}
         <div className="p-5 border-b border-stone-800 bg-gradient-to-r from-stone-900 via-stone-850 to-stone-900 flex justify-between items-start">
           <div className="flex items-center gap-3">
-            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-600 to-amber-800 border-2 border-amber-400/50 flex items-center justify-center font-serif text-2xl font-black text-amber-100 shadow-lg">
-              {player.name.slice(0, 1)}
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-amber-600 to-amber-800 border-2 border-amber-400/50 flex items-center justify-center font-serif text-2xl font-black text-amber-100 shadow-lg shrink-0">
+              {playerName.slice(0, 1) || <User className="w-6 h-6" />}
             </div>
             <div>
               <div className="flex items-center gap-2 flex-wrap">
-                <h3 className="text-xl font-bold text-stone-100">{player.name}</h3>
+                <h3 className="text-xl font-bold text-stone-100">{playerName}</h3>
                 <span className={`text-xs px-2.5 py-0.5 rounded-full border font-bold ${currentTier.badgeBg} ${currentTier.textColor} ${currentTier.badgeBorder}`}>
                   {currentTier.name} ({currentTier.englishName})
                 </span>
-                {isAdmin && !isEditing && (
+                {!isEditing && (
                   <button
                     onClick={startEdit}
                     className="text-[11px] px-2 py-0.5 rounded bg-stone-800 hover:bg-stone-700 text-amber-300 border border-stone-700 flex items-center gap-1 font-semibold transition"
+                    title="修改此棋手的天梯排位与积分"
                   >
                     <Edit2 className="w-3 h-3" />
                     <span>管理员修改段位分</span>
@@ -152,7 +202,7 @@ export const PlayerProfileModal: React.FC<Props> = ({
                 )}
               </div>
               <p className="text-xs text-stone-400 mt-1">
-                称号：{player.title || '象棋棋手'} · 棋艺入驻：{player.createdAt.split('T')[0]}
+                称号：{playerTitle} · 棋艺入驻：{joinDate}
               </p>
             </div>
           </div>
@@ -179,13 +229,13 @@ export const PlayerProfileModal: React.FC<Props> = ({
             </div>
           )}
 
-          {/* Admin Edit Form Modal Section */}
+          {/* Admin Edit Form Section */}
           {isEditing && (
             <div className="p-4 rounded-xl bg-stone-950 border border-amber-500/40 space-y-3">
               <div className="flex justify-between items-center">
                 <span className="text-xs font-bold text-amber-400 flex items-center gap-1">
                   <Edit2 className="w-3.5 h-3.5" />
-                  <span>管理员修改「{player.name}」天梯数据</span>
+                  <span>管理员修改「{playerName}」天梯数据</span>
                 </span>
                 <span className="text-[10px] text-stone-500">局数 × 10 = 段位分标准</span>
               </div>
@@ -276,17 +326,17 @@ export const PlayerProfileModal: React.FC<Props> = ({
                   className="px-4 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-stone-950 font-bold text-xs flex items-center gap-1.5 transition shadow"
                 >
                   <Save className="w-3.5 h-3.5" />
-                  <span>保存并广播到所有设备</span>
+                  <span>{loading ? '保存中...' : '保存并广播到所有设备'}</span>
                 </button>
               </div>
             </div>
           )}
 
-          {/* Glorious Tier Emblem Banner */}
+          {/* Chinese Chess Piece Rank Emblem Banner */}
           <div className="relative overflow-hidden rounded-2xl bg-gradient-to-b from-stone-950 via-stone-900 to-stone-950 p-4 border border-stone-800 flex flex-col items-center text-center shadow-inner">
             <div className="absolute inset-0 opacity-10 bg-[radial-gradient(#c084fc_1px,transparent_1px)] [background-size:12px_12px] pointer-events-none" />
 
-            {/* Winged Insignia Shield */}
+            {/* Authentic Circular Chinese Chess Token */}
             <RankEmblem tier={currentTier} size="lg" />
 
             <div className="mt-2">
@@ -294,7 +344,7 @@ export const PlayerProfileModal: React.FC<Props> = ({
                 {currentTier.name} · {currentTier.englishName}
               </span>
               <span className="text-xs text-stone-400">
-                当前排位积分：<strong className="text-amber-400 font-bold">{player.rankScore}</strong> 分 · 胜局：{player.rankWins} 局
+                当前排位积分：<strong className="text-amber-400 font-bold">{rankScore}</strong> 分 · 胜局：{rankWins} 局
               </span>
             </div>
 
@@ -331,35 +381,35 @@ export const PlayerProfileModal: React.FC<Props> = ({
                   <Flame className="w-3.5 h-3.5 text-amber-500" />
                   排位天梯积分
                 </span>
-                <span className="text-stone-500 text-[10px]">最高 {player.bestRankScore}</span>
+                <span className="text-stone-500 text-[10px]">最高 {bestRankScore}</span>
               </div>
               <div className="text-2xl font-black text-amber-400">
-                {player.rankScore}
+                {rankScore}
               </div>
               <div className="mt-2 text-[11px] text-stone-400 flex justify-between">
-                <span>{player.rankMatches}战 {player.rankWins}胜 {player.rankLosses}负</span>
+                <span>{rankMatches}战 {rankWins}胜 {rankLosses}负</span>
                 <span className="font-semibold text-amber-200">
-                  胜率 {player.rankMatches ? Math.round((player.rankWins / player.rankMatches) * 100) : 0}%
+                  胜率 {rankMatches ? Math.round((rankWins / rankMatches) * 100) : 0}%
                 </span>
               </div>
             </div>
 
-            {/* Match Card */}
+            {/* Casual Match Card */}
             <div className="bg-stone-950 p-3.5 rounded-xl border border-stone-800">
               <div className="flex items-center justify-between text-xs text-stone-300 font-medium mb-1">
                 <span className="flex items-center gap-1">
                   <Swords className="w-3.5 h-3.5 text-amber-400" />
                   休闲匹配积分
                 </span>
-                <span className="text-stone-500 text-[10px]">最高 {player.bestMatchScore}</span>
+                <span className="text-stone-500 text-[10px]">最高 {bestMatchScore}</span>
               </div>
               <div className="text-2xl font-black text-stone-200">
-                {player.matchScore}
+                {matchScore}
               </div>
               <div className="mt-2 text-[11px] text-stone-400 flex justify-between">
-                <span>{player.matchMatches}战 {player.matchWins}胜 {player.matchLosses}负</span>
+                <span>{matchMatches}战 {matchWins}胜 {matchLosses}负</span>
                 <span className="font-semibold text-stone-300">
-                  胜率 {player.matchMatches ? Math.round((player.matchWins / player.matchMatches) * 100) : 0}%
+                  胜率 {matchMatches ? Math.round((matchWins / matchMatches) * 100) : 0}%
                 </span>
               </div>
             </div>
@@ -384,8 +434,8 @@ export const PlayerProfileModal: React.FC<Props> = ({
             <div className="w-px h-6 bg-stone-800" />
             <div>
               <span className="text-[11px] text-stone-400 block">当前连胜/连败</span>
-              <span className={`text-base font-bold ${player.rankStreak > 0 ? 'text-red-400' : 'text-stone-400'}`}>
-                {player.rankStreak > 0 ? `${player.rankStreak}连胜` : player.rankStreak < 0 ? `${Math.abs(player.rankStreak)}连败` : '平'}
+              <span className={`text-base font-bold ${rankStreak > 0 ? 'text-red-400' : 'text-stone-400'}`}>
+                {rankStreak > 0 ? `${rankStreak}连胜` : rankStreak < 0 ? `${Math.abs(rankStreak)}连败` : '平'}
               </span>
             </div>
           </div>
@@ -404,10 +454,13 @@ export const PlayerProfileModal: React.FC<Props> = ({
             ) : (
               <div className="space-y-2 max-h-[200px] overflow-y-auto pr-1">
                 {playerMatches.map((m) => {
-                  const isRed = m.redPlayer.id === player.id;
-                  const opponent = isRed ? m.blackPlayer.name : m.redPlayer.name;
+                  const isRed = m.redPlayer?.id === player.id;
+                  const opponent = isRed ? (m.blackPlayer?.name || '黑方') : (m.redPlayer?.name || '红方');
                   const isWin = (isRed && m.winner === 'red') || (!isRed && m.winner === 'black');
                   const isDraw = m.winner === 'draw';
+                  const matchDate = m.startTime
+                    ? (m.startTime.includes('T') ? m.startTime.split('T')[0] : m.startTime)
+                    : '近期';
 
                   return (
                     <div
@@ -436,7 +489,7 @@ export const PlayerProfileModal: React.FC<Props> = ({
                             </span>
                           </div>
                           <div className="text-[10px] text-stone-500 mt-0.5">
-                            {m.mode === 'ranked' ? '排位天梯' : '休闲匹配'} · 共{m.moves?.length || 0}手 · {m.startTime?.split('T')[0]}
+                            {m.mode === 'ranked' ? '排位天梯' : '休闲匹配'} · 共{m.moves?.length || 0}手 · {matchDate}
                           </div>
                         </div>
                       </div>

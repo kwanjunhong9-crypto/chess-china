@@ -24,19 +24,23 @@ export const Leaderboard: React.FC<Props> = ({
   const [searchTerm, setSearchTerm] = useState('');
   const [showTierModal, setShowTierModal] = useState(false);
 
-  // Sort players depending on activeTab
+  // Sort players safely depending on activeTab
   const sortedPlayers = [...players].sort((a, b) => {
     if (activeTab === 'ranked') {
-      if (b.rankScore !== a.rankScore) return b.rankScore - a.rankScore;
-      return b.rankWins - a.rankWins;
+      const bScore = Math.max(0, Number(b.rankScore) || 0);
+      const aScore = Math.max(0, Number(a.rankScore) || 0);
+      if (bScore !== aScore) return bScore - aScore;
+      return (Number(b.rankWins) || 0) - (Number(a.rankWins) || 0);
     } else {
-      if (b.matchScore !== a.matchScore) return b.matchScore - a.matchScore;
-      return b.matchWins - a.matchWins;
+      const bScore = Math.max(0, Number(b.matchScore) || 0);
+      const aScore = Math.max(0, Number(a.matchScore) || 0);
+      if (bScore !== aScore) return bScore - aScore;
+      return (Number(b.matchWins) || 0) - (Number(a.matchWins) || 0);
     }
   });
 
   const filteredPlayers = sortedPlayers.filter(p =>
-    p.name.toLowerCase().includes(searchTerm.toLowerCase().trim())
+    (p.name || '').toLowerCase().includes(searchTerm.toLowerCase().trim())
   );
 
   const top1 = sortedPlayers[0];
