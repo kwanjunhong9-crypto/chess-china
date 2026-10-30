@@ -146,8 +146,8 @@ export default function App() {
   // State from server / local storage with auto-repair
   const [players, setPlayers] = useState<Player[]>(() => {
     if (initialCache?.players && Array.isArray(initialCache.players) && initialCache.players.length > 0) {
-      const kj = initialCache.players.find((p: Player) => p.name === 'KWANJUNHONG');
-      if (kj && kj.rankScore === 0) {
+      const totalScore = initialCache.players.reduce((sum: number, p: Player) => sum + (Number(p.rankScore) || 0), 0);
+      if (totalScore === 0) {
         return DEFAULT_PLAYERS;
       }
       return initialCache.players;

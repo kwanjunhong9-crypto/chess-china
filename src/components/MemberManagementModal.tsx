@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Player } from '../types/chess';
-import { X, UserPlus, Trash2, Users, AlertCircle, CheckCircle2, Edit2, ShieldAlert, Save, RefreshCw } from 'lucide-react';
+import { X, UserPlus, Trash2, Users, AlertCircle, CheckCircle2, Edit2, ShieldAlert, Save, RefreshCw, RotateCcw } from 'lucide-react';
 import { getTierByScore } from '../utils/tierSystem';
 import { RankEmblem } from './RankEmblem';
 
@@ -292,6 +292,125 @@ export const MemberManagementModal: React.FC<Props> = ({
     }
   };
 
+  // Restore official registered leaderboard baseline
+  const handleRestoreOfficialBaseline = async () => {
+    if (!isAdmin) {
+      setError('请先输入裁判管理员密码');
+      onRequestAdminLogin();
+      return;
+    }
+    if (!confirm('确定要恢复官方天梯积分榜基准吗？（KWANJUNHONG 1460分、JEANOOI 1260分、RUICHEN 1250分）')) return;
+
+    setLoading(true);
+    setError(null);
+    const officialBaseline: Player[] = [
+      {
+        id: 'p_1793281003253_7bzur',
+        name: 'KWANJUNHONG',
+        title: '新手',
+        createdAt: '2026-10-29T13:36:43.253Z',
+        rankScore: 1460,
+        rankMatches: 4,
+        rankWins: 4,
+        rankLosses: 0,
+        rankDraws: 0,
+        rankStreak: 4,
+        bestRankScore: 1460,
+        matchScore: 1200,
+        matchMatches: 3,
+        matchWins: 3,
+        matchLosses: 0,
+        matchDraws: 0,
+        matchStreak: 3,
+        bestMatchScore: 1200,
+      },
+      {
+        id: 'p_1793281011380_gln93',
+        name: 'JEANOOI',
+        title: '象棋高手',
+        createdAt: '2026-10-29T13:36:51.380Z',
+        rankScore: 1260,
+        rankMatches: 4,
+        rankWins: 3,
+        rankLosses: 1,
+        rankDraws: 0,
+        rankStreak: 2,
+        bestRankScore: 1260,
+        matchScore: 1150,
+        matchMatches: 3,
+        matchWins: 2,
+        matchLosses: 1,
+        matchDraws: 0,
+        matchStreak: 2,
+        bestMatchScore: 1150,
+      },
+      {
+        id: 'p_1793281011395_knydt',
+        name: 'RUICHEN',
+        title: '棋界新星',
+        createdAt: '2026-10-29T13:36:51.395Z',
+        rankScore: 1250,
+        rankMatches: 4,
+        rankWins: 3,
+        rankLosses: 1,
+        rankDraws: 0,
+        rankStreak: 1,
+        bestRankScore: 1250,
+        matchScore: 1100,
+        matchMatches: 3,
+        matchWins: 2,
+        matchLosses: 1,
+        matchDraws: 0,
+        matchStreak: 1,
+        bestMatchScore: 1100,
+      },
+      {
+        id: 'p_1793281011409_m7qop',
+        name: 'YUHENG',
+        title: '象棋爱好者',
+        createdAt: '2026-10-29T13:36:51.409Z',
+        rankScore: 0,
+        rankMatches: 0,
+        rankWins: 0,
+        rankLosses: 0,
+        rankDraws: 0,
+        rankStreak: 0,
+        bestRankScore: 0,
+        matchScore: 0,
+        matchMatches: 0,
+        matchWins: 0,
+        matchLosses: 0,
+        matchDraws: 0,
+        matchStreak: 0,
+        bestMatchScore: 0,
+      },
+    ];
+
+    const pwd = adminPassword || localStorage.getItem('chess_admin_token') || 'chessadmin123';
+    try {
+      for (const p of officialBaseline) {
+        await fetch('/api/players/update', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-admin-password': pwd,
+          },
+          body: JSON.stringify({
+            ...p,
+            adminPassword: pwd,
+          }),
+        });
+      }
+      setSuccess('已成功恢复官方天梯积分榜（KWANJUNHONG 1460分、JEANOOI 1260分、RUICHEN 1250分）并全球同步！');
+      onBatchSyncPlayers(officialBaseline);
+    } catch (err) {
+      onBatchSyncPlayers(officialBaseline);
+      setSuccess('已在本地恢复官方天梯积分榜！');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-md p-4">
       <div className="w-full max-w-lg rounded-2xl bg-stone-900 border border-stone-800 shadow-2xl overflow-hidden flex flex-col max-h-[88vh]">
@@ -339,16 +458,28 @@ export const MemberManagementModal: React.FC<Props> = ({
                 <CheckCircle2 className="w-4 h-4 text-emerald-400" />
                 <span>已取得裁判管理权限 · 更改将跨所有设备即时生效</span>
               </div>
-              <button
-                type="button"
-                onClick={handleSyncLocalToCloud}
-                disabled={loading}
-                className="text-[11px] px-2.5 py-1 rounded-md bg-stone-800 hover:bg-stone-700 text-amber-300 border border-stone-700 flex items-center gap-1 transition"
-                title="将当前成员名单同步至云端数据库"
-              >
-                <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} />
-                <span>全设备同步</span>
-              </button>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={handleRestoreOfficialBaseline}
+                  disabled={loading}
+                  className="text-[11px] px-2.5 py-1 rounded-md bg-amber-950/80 hover:bg-amber-900 text-amber-300 border border-amber-600/50 flex items-center gap-1 transition"
+                  title="一键恢复官方天梯积分榜（KWANJUNHONG 1460、JEANOOI 1260、RUICHEN 1250）"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  <span>恢复官方积分榜</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSyncLocalToCloud}
+                  disabled={loading}
+                  className="text-[11px] px-2.5 py-1 rounded-md bg-stone-800 hover:bg-stone-700 text-amber-300 border border-stone-700 flex items-center gap-1 transition"
+                  title="将当前成员名单同步至云端数据库"
+                >
+                  <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} />
+                  <span>全设备同步</span>
+                </button>
+              </div>
             </div>
           )}
 

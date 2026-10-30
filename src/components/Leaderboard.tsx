@@ -52,11 +52,15 @@ export const Leaderboard: React.FC<Props> = ({
       {/* Header and Mode Tabs */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-4 border-b border-stone-800">
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <h2 className="text-lg font-bold text-stone-100 flex items-center gap-2">
               <Trophy className="w-5 h-5 text-amber-500" />
-              <span>棋榜风云 · 积分排名</span>
+              <span>全球公开排行榜 · 棋榜风云</span>
             </h2>
+            <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-950/70 border border-emerald-500/40 text-emerald-400 text-[10px] font-bold">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              <span>全球实时同步</span>
+            </div>
             <button
               onClick={() => setShowTierModal(true)}
               className="text-[11px] px-2 py-0.5 rounded-full bg-purple-950/70 text-purple-300 border border-purple-500/50 hover:bg-purple-900 transition flex items-center gap-1 font-semibold"
@@ -65,8 +69,8 @@ export const Leaderboard: React.FC<Props> = ({
               <span>段位规则表</span>
             </button>
           </div>
-          <p className="text-xs text-stone-400 mt-0.5">
-            段位规则：局数×10=段位分 (未排名➔铜➔银➔黄金➔钻石➔岩浆➔宿敌➔至尊宿敌) · 每局+50分
+          <p className="text-xs text-stone-400 mt-1">
+            <strong>全网公开透明：</strong>全球访客均可自由查阅全部棋手段位积分与对弈战绩。管理员裁判改动排名即刻全球实时同步。
           </p>
         </div>
 

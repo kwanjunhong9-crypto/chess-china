@@ -348,28 +348,28 @@ const PlayerProfileContent: React.FC<Props & { player: Player }> = ({
               </span>
             </div>
 
-            {/* Next Tier Progress Bar */}
-            <div className="w-full mt-3 pt-3 border-t border-stone-800/80">
-              <div className="flex justify-between items-center text-xs text-stone-400 mb-1.5">
-                <span>
-                  {nextTier
-                    ? `下一段位「${nextTier.name} (${nextTier.englishName})」需 ${nextTier.minScore}分`
-                    : '已达最高荣誉「至尊宿敌」'}
-                </span>
-                <span className="font-bold text-amber-300">
-                  {nextTier ? `还需 ${tierProgress.remainingScore} 分` : '已达最高峰'}
-                </span>
-              </div>
-
-              {nextTier && (
-                <div className="w-full h-2 rounded-full bg-stone-800 overflow-hidden">
-                  <div
-                    className="h-full bg-gradient-to-r from-amber-500 to-purple-500 rounded-full transition-all duration-500"
-                    style={{ width: `${tierProgress.progressPercent}%` }}
-                  />
+              {/* Next Tier Progress Bar */}
+              <div className="w-full mt-3 pt-3 border-t border-stone-800/80">
+                <div className="flex justify-between items-center text-xs text-stone-400 mb-1.5">
+                  <span>
+                    {nextTier
+                      ? `下一段位「${nextTier.name} (${nextTier.englishName})」需 ${nextTier.minScore}分`
+                      : '已达最高荣誉「至尊宿敌」'}
+                  </span>
+                  <span className="font-bold text-amber-300">
+                    {nextTier ? `还需 ${tierProgress?.remainingScore || 0} 分` : '已达最高峰'}
+                  </span>
                 </div>
-              )}
-            </div>
+
+                {nextTier && (
+                  <div className="w-full h-2 rounded-full bg-stone-800 overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-amber-500 to-purple-500 rounded-full transition-all duration-500"
+                      style={{ width: `${tierProgress?.progressPercent || 0}%` }}
+                    />
+                  </div>
+                )}
+              </div>
           </div>
 
           {/* Dual Rating Cards */}

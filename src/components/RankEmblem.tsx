@@ -18,10 +18,26 @@ export const RankEmblem: React.FC<Props> = ({
   showLabel = false,
   className = '',
 }) => {
-  const currentTier = tier || (score !== undefined ? getTierByScore(score) : getTierByWins(wins ?? 0));
+  const currentTier = tier || (score !== undefined ? getTierByScore(score) : getTierByWins(wins ?? 0)) || {
+    id: 'unranked',
+    name: '未排名',
+    englishName: 'Unranked',
+    minScore: 0,
+    maxScore: 100,
+    minWins: 0,
+    maxWins: 10,
+    color: '#64748b',
+    textColor: 'text-stone-400',
+    badgeBg: 'bg-stone-800/90',
+    badgeBorder: 'border-stone-600',
+    shieldColor: '#52525b',
+    wingColor: '#3f3f46',
+    gemColor: '#71717a',
+    description: '未排名',
+  };
 
   // Square dimensions for round Chinese Chess piece shape
-  const sizeMap = {
+  const sizeMap: Record<string, { dim: number; fontSize: number; strokeWidth: number }> = {
     xs: { dim: 24, fontSize: 13, strokeWidth: 1.2 },
     sm: { dim: 34, fontSize: 18, strokeWidth: 1.6 },
     md: { dim: 48, fontSize: 26, strokeWidth: 2.2 },
@@ -29,7 +45,7 @@ export const RankEmblem: React.FC<Props> = ({
     xl: { dim: 96, fontSize: 52, strokeWidth: 3.8 },
   };
 
-  const { dim, fontSize, strokeWidth } = sizeMap[size];
+  const { dim, fontSize, strokeWidth } = sizeMap[size] || sizeMap.md;
 
   // 100% original Chinese Chess Piece Rank Palette
   // Colors strictly follow user requirements:
