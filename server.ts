@@ -14,11 +14,46 @@ const app = express();
 const PORT = 3000;
 const ADMIN_PASSWORD = 'chessadmin123';
 
+// Enable full permissive CORS so any tablet, phone, or cross-domain client can connect
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, x-admin-password');
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  next();
+});
+
 app.use(express.json());
 
 // Persistent database file setup
 const DATA_DIR = path.resolve(__dirname, 'data');
 const DB_FILE = path.join(DATA_DIR, 'chess_records.json');
+
+// SSE Real-time client pool
+interface SSEClient {
+  id: string;
+  res: express.Response;
+}
+let sseClients: SSEClient[] = [];
+
+function broadcastState(eventType = 'state_update') {
+  if (sseClients.length === 0) return;
+  const payload = JSON.stringify({
+    type: eventType,
+    players: db.players,
+    currentMatch: db.currentMatch,
+    matchHistory: db.matchHistory,
+    lastUpdated: db.lastUpdated,
+    onlineDevices: sseClients.length,
+  });
+  sseClients.forEach(c => {
+    try {
+      c.res.write(`data: ${payload}\n\n`);
+    } catch (_) {}
+  });
+}
 
 interface Player {
   id: string;
@@ -197,6 +232,8 @@ function saveDb(data: DatabaseSchema) {
     data.lastUpdated = new Date().toISOString();
     fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2), 'utf-8');
     console.log(`[DB] Successfully saved ${data.players.length} players to ${DB_FILE}`);
+    // Broadcast state to all connected devices in real time
+    broadcastState('state_update');
   } catch (err) {
     console.error('Error saving db file:', err);
   }
@@ -228,6 +265,42 @@ function verifyAdmin(req: express.Request, res: express.Response, next: express.
   }
 }
 
+// SSE Real-time stream for instant multi-device synchronization (PC, iPad, Mobile)
+app.get('/api/events', (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+
+  const clientId = `client_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+  const client: SSEClient = { id: clientId, res };
+  sseClients.push(client);
+
+  // Send immediate initial sync payload
+  res.write(`data: ${JSON.stringify({
+    type: 'init',
+    players: db.players,
+    currentMatch: db.currentMatch,
+    matchHistory: db.matchHistory,
+    lastUpdated: db.lastUpdated,
+    onlineDevices: sseClients.length,
+  })}\n\n`);
+
+  // Heartbeat ping every 12 seconds to maintain persistent connection across tablets and proxies
+  const pingInterval = setInterval(() => {
+    try {
+      res.write(`: ping ${Date.now()}\n\n`);
+    } catch (_) {
+      clearInterval(pingInterval);
+    }
+  }, 12000);
+
+  req.on('close', () => {
+    clearInterval(pingInterval);
+    sseClients = sseClients.filter(c => c.id !== clientId);
+  });
+});
+
 // API Routes
 app.get('/api/state', (req, res) => {
   // Reload from disk to keep multiple workers / instances synchronized
@@ -238,6 +311,17 @@ app.get('/api/state', (req, res) => {
     currentMatch: db.currentMatch,
     matchHistory: db.matchHistory,
     lastUpdated: db.lastUpdated,
+    onlineDevices: Math.max(1, sseClients.length),
+  });
+});
+
+app.get('/api/sync/status', (req, res) => {
+  res.json({
+    success: true,
+    onlineDevices: Math.max(1, sseClients.length),
+    totalPlayers: db.players.length,
+    lastUpdated: db.lastUpdated,
+    serverTime: new Date().toISOString(),
   });
 });
 

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Player } from '../types/chess';
-import { Trophy, Medal, Flame, Search, ChevronRight, UserPlus, Users } from 'lucide-react';
+import { Trophy, Medal, Flame, Search, ChevronRight, UserPlus, Users, Tablet, UserCheck, Sparkles } from 'lucide-react';
 import { RankEmblem } from './RankEmblem';
 import { getTierByScore, TIERS } from '../utils/tierSystem';
 
@@ -10,6 +10,7 @@ interface Props {
   onTabChange: (tab: 'ranked' | 'match') => void;
   onSelectPlayer: (player: Player) => void;
   onOpenAddMember?: () => void;
+  onOpenDeviceSync?: () => void;
   isAdmin: boolean;
 }
 
@@ -19,10 +20,23 @@ export const Leaderboard: React.FC<Props> = ({
   onTabChange,
   onSelectPlayer,
   onOpenAddMember,
+  onOpenDeviceSync,
   isAdmin,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [showTierModal, setShowTierModal] = useState(false);
+  const [myPlayerId, setMyPlayerId] = useState<string>(() => {
+    return localStorage.getItem('my_xiangqi_player_id') || '';
+  });
+
+  const handleSetMyPlayer = (id: string) => {
+    setMyPlayerId(id);
+    if (id) {
+      localStorage.setItem('my_xiangqi_player_id', id);
+    } else {
+      localStorage.removeItem('my_xiangqi_player_id');
+    }
+  };
 
   // Sort players safely depending on activeTab
   const sortedPlayers = [...players].sort((a, b) => {
@@ -38,6 +52,15 @@ export const Leaderboard: React.FC<Props> = ({
       return (Number(b.matchWins) || 0) - (Number(a.matchWins) || 0);
     }
   });
+
+  // Calculate my rank
+  const myPlayerIndex = sortedPlayers.findIndex(p => p.id === myPlayerId || p.name.toLowerCase() === myPlayerId.toLowerCase());
+  const myPlayer = myPlayerIndex !== -1 ? sortedPlayers[myPlayerIndex] : null;
+  const myRankNumber = myPlayerIndex !== -1 ? myPlayerIndex + 1 : null;
+  const playerAhead = myPlayerIndex > 0 ? sortedPlayers[myPlayerIndex - 1] : null;
+  const pointsBehind = playerAhead && myPlayer
+    ? (activeTab === 'ranked' ? playerAhead.rankScore - myPlayer.rankScore : playerAhead.matchScore - myPlayer.matchScore)
+    : 0;
 
   const filteredPlayers = sortedPlayers.filter(p =>
     (p.name || '').toLowerCase().includes(searchTerm.toLowerCase().trim())
@@ -61,6 +84,16 @@ export const Leaderboard: React.FC<Props> = ({
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
               <span>全球实时同步</span>
             </div>
+            {onOpenDeviceSync && (
+              <button
+                onClick={onOpenDeviceSync}
+                className="text-[11px] px-2.5 py-0.5 rounded-full bg-cyan-950/80 text-cyan-300 border border-cyan-500/50 hover:bg-cyan-900 transition flex items-center gap-1 font-semibold"
+                title="获取平板与手机专属访问链接及扫码"
+              >
+                <Tablet className="w-3 h-3 text-cyan-400" />
+                <span>平板同步链接</span>
+              </button>
+            )}
             <button
               onClick={() => setShowTierModal(true)}
               className="text-[11px] px-2 py-0.5 rounded-full bg-purple-950/70 text-purple-300 border border-purple-500/50 hover:bg-purple-900 transition flex items-center gap-1 font-semibold"
@@ -237,6 +270,72 @@ export const Leaderboard: React.FC<Props> = ({
           </div>
         </div>
       ) : null}
+
+      {/* My Personal Standing Feature ("还有自己的排行") */}
+      <div className="mb-3.5 p-3 rounded-xl bg-gradient-to-r from-stone-950 via-stone-900 to-stone-950 border border-amber-600/30 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-md">
+        <div className="flex items-center gap-2.5 w-full sm:w-auto">
+          {myPlayer ? (
+            <>
+              <div className="shrink-0">
+                <RankEmblem tier={getTierByScore(activeTab === 'ranked' ? myPlayer.rankScore : myPlayer.matchScore)} size="sm" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs text-amber-400 font-bold flex items-center gap-1">
+                    <UserCheck className="w-3.5 h-3.5" />
+                    <span>我的专属排位：</span>
+                  </span>
+                  <span className="text-sm font-extrabold text-stone-100">
+                    {myPlayer.name}
+                  </span>
+                  <span className="text-xs font-black px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                    第 {myRankNumber} 名
+                  </span>
+                </div>
+                <div className="text-[11px] text-stone-400 mt-0.5">
+                  当前天梯：<strong className="text-amber-400 font-bold">{activeTab === 'ranked' ? myPlayer.rankScore : myPlayer.matchScore}分</strong> ({getTierByScore(activeTab === 'ranked' ? myPlayer.rankScore : myPlayer.matchScore).name})
+                  {playerAhead ? (
+                    <span className="text-stone-400 ml-1.5">
+                      · 距上一名 ({playerAhead.name}) 还差 <strong className="text-amber-300">{Math.max(1, pointsBehind)}分</strong>
+                    </span>
+                  ) : (
+                    <span className="text-emerald-400 font-bold ml-1.5">· 当前位列全球榜首 👑</span>
+                  )}
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="flex items-center gap-2 text-xs text-stone-400">
+              <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
+              <span><strong>查看我的专属排行：</strong>在右侧选择你的名字，即可锁定查看你自己的实时名次与差距</span>
+            </div>
+          )}
+        </div>
+
+        {/* Player Selector Dropdown */}
+        <div className="flex items-center gap-2 w-full sm:w-auto justify-end shrink-0">
+          <select
+            value={myPlayerId}
+            onChange={(e) => handleSetMyPlayer(e.target.value)}
+            className="bg-stone-900 border border-stone-700 text-xs text-stone-200 rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-amber-500"
+          >
+            <option value="">-- 选择/切换我的名字 --</option>
+            {sortedPlayers.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name} ({activeTab === 'ranked' ? p.rankScore : p.matchScore}分)
+              </option>
+            ))}
+          </select>
+          {myPlayer && (
+            <button
+              onClick={() => onSelectPlayer(myPlayer)}
+              className="px-2.5 py-1.5 rounded-lg bg-stone-800 hover:bg-stone-700 text-amber-300 text-xs font-semibold transition border border-stone-700 shrink-0"
+            >
+              查看我的资料
+            </button>
+          )}
+        </div>
+      </div>
 
       {/* Search Input Bar AND Dedicated Permanent [ + 增加成员 ] Button */}
       <div className="flex gap-2 mb-3">
